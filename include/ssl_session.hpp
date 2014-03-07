@@ -38,6 +38,7 @@
 #include <openssl/rand.h>
 #include <openssl/pkcs12.h>
 
+#define BUFFER_SIZE 4096
 
 class ssl_session_t {
     SSL* ssl;
@@ -71,45 +72,40 @@ public:
         SSL_set_bio(ssl, read_bio, write_bio);
     }
 
-    int
-    read_ssl(
-        const std::deque<uv_buf_t>& input,
-        std::deque<uv_buf_t>&       output)
-
+    bool
+    handshake_done()
     {
-        for (std::deque<uv_buf_t>::const_iterator it = input.begin();
-             it != input.end();
-             ++it)
-        {
-            int written = BIO_write(read_bio, it->base, it->len);
-            check_error(written);
-        }
+        return SSL_is_init_finished(ssl);
+    }
 
-        for (;;) {
-            uv_buf_t buf = alloc_buffer(NULL, 1024);
-            int read = SSL_read(ssl, buf.base, buf.len);
-
-            if (!check_error(read)) {
-                free_buffer(buf);
-                return CQL_ERROR_SSL_READ;
-            }
-
-            buf.len = read;
-            output.push_back(buf);
-            if (read <= 1024) {
-                break;
-            }
-        }
-        return CQL_ERROR_NO_ERROR;
+    char*
+    ciphers(
+        char* output,
+        size_t size)
+    {
+        SSL_CIPHER* sc = SSL_get_current_cipher(ssl);
+        return SSL_CIPHER_description(sc, output, size);
     }
 
     int
-    write_ssl(
-        const std::deque<uv_buf_t>& input,
-        std::deque<uv_buf_t>&       output)
+    read_write(
+        const std::deque<uv_buf_t>& read_input,
+        std::deque<uv_buf_t>&       read_output,
+        const std::deque<uv_buf_t>& write_input,
+        std::deque<uv_buf_t>&       write_output)
     {
-        for (std::deque<uv_buf_t>::const_iterator it = input.begin();
-             it != input.end();
+        for (std::deque<uv_buf_t>::const_iterator it = read_input.begin();
+             it != read_input.end();
+             ++it)
+        {
+            int written = BIO_write(read_bio, it->base, it->len);
+            if (!check_error(written)) {
+                return CQL_ERROR_SSL_READ;
+            }
+        }
+
+        for (std::deque<uv_buf_t>::const_iterator it = write_input.begin();
+             it != write_input.end();
              ++it)
         {
             int written = SSL_write(ssl, it->base, it->len);
@@ -119,12 +115,36 @@ public:
         }
 
         for (;;) {
-            uv_buf_t buf = alloc_buffer(NULL, 1024);
-            int read = BIO_read(write_bio, buf.base, buf.len);
-            buf.len = read;
-            output.push_back(buf);
+            uv_buf_t buf = alloc_buffer(BUFFER_SIZE);
+            int read = SSL_read(ssl, buf.base, buf.len);
 
-            if (read <= 1024) {
+            if (!check_error(read)) {
+                free_buffer(buf);
+                return CQL_ERROR_SSL_READ;
+            }
+
+            if (read > 0 ) {
+                buf.len = read;
+                read_output.push_back(buf);
+            }
+            free_buffer(buf);
+
+            if (read != BUFFER_SIZE || read == 0) {
+                break;
+            }
+        }
+
+        for (;;) {
+            uv_buf_t buf = alloc_buffer(BUFFER_SIZE);
+            int read = BIO_read(write_bio, buf.base, buf.len);
+
+            if (read > 0) {
+                buf.len = read;
+                write_output.push_back(buf);
+            }
+            free_buffer(buf);
+
+            if (read != BUFFER_SIZE || read == 0) {
                 break;
             }
         }
@@ -136,19 +156,15 @@ public:
         int input)
     {
         int err = SSL_get_error(ssl, input);
-
         if (err == SSL_ERROR_NONE || err == SSL_ERROR_WANT_READ) {
             return true;
         }
 
         if (err == SSL_ERROR_SYSCALL) {
-            ERR_print_errors_fp(stderr);
-            perror("syscall error: ");
             return false;
         }
 
         if (err == SSL_ERROR_SSL) {
-            ERR_print_errors_fp(stderr);
             return false;
         }
         return true;

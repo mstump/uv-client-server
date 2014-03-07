@@ -60,7 +60,7 @@ struct connection_t {
    consume_buffer(
       uv_buf_t buf)
    {
-      if (incomming->consume_buffer(buf)) {
+       if (incomming->consume(buf.base, buf.len)) {
          delete incomming;
          incomming = new message_t();
       }

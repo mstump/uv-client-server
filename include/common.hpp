@@ -58,270 +58,317 @@
 #define CQL_OPCODE_REGISTER     0x0B
 #define CQL_OPCODE_EVENT        0x0C
 
+uv_buf_t
+alloc_buffer(
+    size_t suggested_size)
+{
+    return uv_buf_init(new char[suggested_size], suggested_size);
+}
 
 uv_buf_t
 alloc_buffer(
-   uv_handle_t *handle,
-   size_t suggested_size)
+    uv_handle_t *handle,
+    size_t       suggested_size)
 {
-   (void) handle;
-   return uv_buf_init((char*) malloc(suggested_size), suggested_size);
+    (void) handle;
+    return alloc_buffer(suggested_size);
 }
 
 void
 free_buffer(
-   uv_buf_t& buf)
+    uv_buf_t buf)
 {
-   delete buf.base;
+    delete buf.base;
+}
+
+void
+clear_buffer_deque(
+    std::deque<uv_buf_t>& buffers)
+{
+    for (std::deque<uv_buf_t>::iterator it = buffers.begin();
+         it != buffers.end();
+         ++it)
+    {
+        free_buffer(*it);
+    }
+    buffers.clear();
 }
 
 char*
 decode_short(
-   char*    input,
-   int16_t& output)
+    char*    input,
+    int16_t& output)
 {
-   output = ntohs(*(reinterpret_cast<int16_t*>(input)));
-   return input + sizeof(int16_t);
+    output = ntohs(*(reinterpret_cast<int16_t*>(input)));
+    return input + sizeof(int16_t);
 }
 
 char*
 encode_short(
-   char*   output,
-   int16_t value)
+    char*   output,
+    int16_t value)
 {
-   int16_t net_value = htons(value);
-   return (char*) memcpy(output, &net_value, sizeof(net_value)) + sizeof(int16_t);
+    int16_t net_value = htons(value);
+    return (char*) memcpy(output, &net_value, sizeof(net_value)) + sizeof(int16_t);
 }
 
 char*
 decode_int(
-   char*    input,
-   int32_t& output)
+    char*    input,
+    int32_t& output)
 {
-   output = ntohl(*(reinterpret_cast<const int32_t*>(input)));
-   return input + sizeof(int32_t);
+    output = ntohl(*(reinterpret_cast<const int32_t*>(input)));
+    return input + sizeof(int32_t);
 }
 
 char*
 encode_int(
-   char*   output,
-   int32_t value)
+    char*   output,
+    int32_t value)
 {
-   int32_t net_value = htonl(value);
-   return (char*) memcpy(output, &net_value, sizeof(net_value)) + sizeof(int32_t);
+    int32_t net_value = htonl(value);
+    return (char*) memcpy(output, &net_value, sizeof(net_value)) + sizeof(int32_t);
 }
 
 char*
 decode_string(
-   char*   input,
-   char**  output,
-   size_t& size)
+    char*   input,
+    char**  output,
+    size_t& size)
 {
-   *output = decode_short(input, ((int16_t&) size));
-   return *output + size;
+    *output = decode_short(input, ((int16_t&) size));
+    return *output + size;
 }
 
 char*
 encode_string(
-   char*       output,
-   const char* input,
-   size_t      size)
+    char*       output,
+    const char* input,
+    size_t      size)
 {
-   char* buffer = encode_short(output, size);
-   return (char*) memcpy(buffer, input, size) + size;
+    char* buffer = encode_short(output, size);
+    return (char*) memcpy(buffer, input, size) + size;
 }
 
 
 struct body_t {
 
-   virtual bool
-   consume(
-      size_t                reserved,
-      std::deque<uv_buf_t>& buffers) = 0;
+    virtual bool
+    consume(
+        char*  buffer,
+        size_t size) = 0;
 
-   virtual bool
-   prepare(
-      size_t                reserved,
-      std::deque<uv_buf_t>& buffers) = 0;
+    virtual bool
+    prepare(
+        size_t  reserved,
+        char**  output,
+        size_t& size) = 0;
 
-   virtual
-   ~body_t()
-   {}
+    virtual
+    ~body_t()
+    {}
 
 };
 
 struct body_error_t
-   : public body_t
+    : public body_t
 {
-   std::auto_ptr<char> guard;
-   int32_t             code;
-   char*               message;
-   size_t              message_size;
+    std::unique_ptr<char> guard;
+    int32_t               code;
+    char*                 message;
+    size_t                message_size;
 
-   body_error_t() :
-      guard(NULL),
-      code(0xFFFFFFFF),
-      message(NULL),
-      message_size(0)
-   {}
+    body_error_t() :
+        code(0xFFFFFFFF),
+        message(NULL),
+        message_size(0)
+    {}
 
-   body_error_t(
-      int32_t     code,
-      const char* input,
-      size_t      input_size) :
-      guard((char*) malloc(input_size)),
-      code(code),
-      message(guard.get()),
-      message_size(input_size)
-   {
-      memcpy(message, input, input_size);
-   }
+    body_error_t(
+        int32_t     code,
+        const char* input,
+        size_t      input_size) :
+        guard((char*) malloc(input_size)),
+        code(code),
+        message(guard.get()),
+        message_size(input_size)
+    {
+        memcpy(message, input, input_size);
+    }
 
-   bool
-   consume(
-      size_t                reserved,
-      std::deque<uv_buf_t>& buffers)
-   {
-      if (buffers.empty()) {
-         return false;
-      }
+    bool
+    consume(
+        char*  buffer,
+        size_t size)
+    {
+        (void) size;
+        buffer = decode_int(buffer, code);
+        decode_string(buffer, &message, message_size);
+        return true;
+    }
 
-      char* buffer = buffers.front().base + reserved;
-      buffer       = decode_int(buffer, code);
-      decode_string(buffer, &message, message_size);
-      return true;
-   }
+    bool
+    prepare(
+        size_t  reserved,
+        char**  output,
+        size_t& size)
+    {
+        size = reserved + sizeof(int32_t) + sizeof(int16_t) + message_size;
+        *output = new char[size];
 
-   bool
-   prepare(
-      size_t                reserved,
-      std::deque<uv_buf_t>& buffers)
-   {
-      size_t buffer_size = reserved + sizeof(int32_t) + sizeof(int16_t) + message_size;
-      buffers.push_back(uv_buf_init((char*) malloc(buffer_size), buffer_size));
-
-      char* buffer = buffers.back().base + reserved;
-      buffer       = encode_int(buffer, code);
-      encode_string(buffer, message, message_size);
-      return true;
-   }
+        char* buffer = *output + reserved;
+        buffer       = encode_int(buffer, code);
+        encode_string(buffer, message, message_size);
+        return true;
+    }
 
 private:
-   body_error_t(const body_error_t&) {}
-   void operator=(const body_error_t&) {}
+    body_error_t(const body_error_t&) {}
+    void operator=(const body_error_t&) {}
 };
 
 struct message_t {
-   typedef std::deque<uv_buf_t> buffer_list_t;
 
-   uint8_t       version;
-   int8_t        flags;
-   int8_t        stream;
-   uint8_t       opcode;
-   int32_t       length;
-   int32_t       received;
-   buffer_list_t buffers;
-   body_t*       body;
+    uint8_t                 version;
+    int8_t                  flags;
+    int8_t                  stream;
+    uint8_t                 opcode;
+    int32_t                 length;
+    int32_t                 received;
 
-   message_t() :
-      version(0),
-      flags(0),
-      stream(0),
-      opcode(0),
-      length(0),
-      received(0),
-      body(0)
-   {}
+    bool                    header_received;
+    char                    header_buffer[CQL_HEADER_SIZE];
+    char*                   header_buffer_pos;
 
-   ~message_t()
-   {
-      clear_buffers();
-   }
+    std::unique_ptr<body_t> body;
+    std::unique_ptr<char>   body_buffer;
+    char*                   body_buffer_pos;
 
-   inline void
-   clear_buffers()
-   {
-      length = 0;
-      while (!buffers.empty()) {
-         delete buffers.front().base;
-         buffers.pop_front();
-      }
-      delete body;
-   }
+    message_t() :
+        version(0),
+        flags(0),
+        stream(0),
+        opcode(0),
+        length(0),
+        received(0),
+        header_received(false),
+        header_buffer_pos(header_buffer)
+    {}
 
-   inline static bool
-   allocate_body(
-      uint8_t  opcode,
-      body_t** body)
-   {
-      switch (opcode) {
-         case CQL_OPCODE_ERROR:
-            *body = static_cast<body_t*>(new body_error_t);
-            return true;
-      }
-      return false;
-   }
+    inline static body_t*
+    allocate_body(
+        uint8_t  opcode)
+    {
+        switch (opcode) {
+            case CQL_OPCODE_ERROR:
+                return static_cast<body_t*>(new body_error_t);
+            default:
+                return NULL;
+        }
+    }
 
-   bool
-   prepare_buffer()
-   {
-      if (body) {
-         if (body->prepare(CQL_HEADER_SIZE, buffers)) {
+    bool
+    prepare(
+        char**  output,
+        size_t& size)
+    {
+        size = 0;
+        if (body.get()) {
+            if (body->prepare(CQL_HEADER_SIZE, output, size)) {
 
-            if (buffers.empty()) {
-               buffers.push_front(uv_buf_init((char*) malloc(CQL_HEADER_SIZE), CQL_HEADER_SIZE));
+                if (!size) {
+                    *output = new char[CQL_HEADER_SIZE];
+                    size = CQL_HEADER_SIZE;
+                }
+                else {
+                    length = size - CQL_HEADER_SIZE;
+                }
+
+                uint8_t* buffer = (uint8_t*) *output;
+                buffer[0]       = version;
+                buffer[1]       = flags;
+                buffer[2]       = stream;
+                buffer[3]       = opcode;
+                encode_int((char*)(buffer + 4), length);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     *
+     *
+     * @param buf the source buffer
+     *
+     * @return how many bytes copied
+     */
+    int
+    consume(
+        char*  input,
+        size_t size)
+    {
+        char* input_pos  = input;
+        received        += size;
+
+        if (!header_received) {
+            if (received >= CQL_HEADER_SIZE) {
+                // we've received more data then we need, just copy what we need
+                size_t overage = received - CQL_HEADER_SIZE;
+                size_t needed  = size - overage;
+                memcpy(header_buffer_pos, input_pos, needed);
+
+                char* buffer       = header_buffer;
+                version            = *(buffer++);
+                flags              = *(buffer++);
+                stream             = *(buffer++);
+                opcode             = *(buffer++);
+                memcpy(&length, buffer, sizeof(int32_t));
+                length = ntohl(length);
+
+                input_pos         += needed;
+                header_buffer_pos  = header_buffer + CQL_HEADER_SIZE;
+                header_received    = true;
+
+                body_buffer.reset(new char[length]);
+                body_buffer_pos = body_buffer.get();
+                body.reset(allocate_body(opcode));
+                if (body == NULL) {
+                    return -1;
+                }
             }
             else {
-               for (buffer_list_t::iterator it = buffers.begin();
-                    it != buffers.end();
-                    ++it)
-               {
-                  length += it->len;
-               }
-               length = length - CQL_HEADER_SIZE;
+                // we haven't received all the data yet, copy the entire input to our buffer
+                memcpy(header_buffer_pos, input_pos, size);
+                header_buffer_pos += size;
+                input_pos += size;
+                return size;
+            }
+        }
+
+        if (received - CQL_HEADER_SIZE >= length) {
+            // we've received more data then we need, just copy what we need
+            size_t overage = received - length - CQL_HEADER_SIZE;
+            size_t needed = (size - (input_pos - input)) - overage;
+
+            memcpy(body_buffer_pos, input_pos, needed);
+            body_buffer_pos += needed;
+            input_pos       += needed;
+
+            if (!body->consume(body_buffer.get() + CQL_HEADER_SIZE, length)) {
+                return -1;
             }
 
-            uint8_t* buffer = (uint8_t*) buffers.front().base;
-            buffer[0]       = version;
-            buffer[1]       = flags;
-            buffer[2]       = stream;
-            buffer[3]       = opcode;
-            encode_int((char*)(buffer + 4), length);
-            return true;
-         }
-      }
-      return false;
-   }
-
-   bool
-   consume_buffer(
-      uv_buf_t buf)
-   {
-      buffers.push_back(buf);
-
-      if (received < CQL_HEADER_SIZE && received + buf.len >= CQL_HEADER_SIZE) {
-         char* buffer = buffers.front().base;
-         version      = *(buffer++);
-         flags        = *(buffer++);
-         stream       = *(buffer++);
-         opcode       = *(buffer++);
-         length       = ntohl(*buffer);
-         received     = buffers.front().len;
-      }
-      else {
-         received += buf.len;
-      }
-
-      if (received >= CQL_HEADER_SIZE) {
-         if ((received - CQL_HEADER_SIZE) >= length) {
-            if (allocate_body(opcode, &body)) {
-               body->consume(CQL_HEADER_SIZE, buffers);
-               return true;
-            }
-         }
-      }
-      return false;
-   }
+        }
+        else {
+            // we haven't received all the data yet, copy the entire input to our buffer
+            memcpy(body_buffer_pos, input_pos, size - (input_pos - input));
+            input_pos       += size;
+            body_buffer_pos += size;
+            return size;
+        }
+        return input_pos - input;
+    }
 };
 
 #endif

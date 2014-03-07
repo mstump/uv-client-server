@@ -49,17 +49,13 @@ print_hex(
 bool
 test_header_consume()
 {
-   char* buffer = new char[sizeof(TEST_MESSAGE_ERROR)];
-   memcpy(buffer, TEST_MESSAGE_ERROR, sizeof(TEST_MESSAGE_ERROR));
-   uv_buf_t buf = uv_buf_init(buffer, sizeof(TEST_MESSAGE_ERROR));
-
    message_t message;
-   CHECK(message.consume_buffer(buf));
-   CHECK_EQUAL(message.version, 0x81);
-   CHECK_EQUAL(message.flags, 0x01);
-   CHECK_EQUAL(message.stream, 0x7F);
-   CHECK_EQUAL(message.opcode, 0x00);
-   CHECK_EQUAL(message.length, 0x00);
+   CHECK_EQUAL(message.consume(TEST_MESSAGE_ERROR, sizeof(TEST_MESSAGE_ERROR)), sizeof(TEST_MESSAGE_ERROR));
+   CHECK_EQUAL((int) message.version, 0x81);
+   CHECK_EQUAL((int) message.flags, 0x01);
+   CHECK_EQUAL((int) message.stream, 0x7F);
+   CHECK_EQUAL((int) message.opcode, 0x00);
+   CHECK_EQUAL((int) message.length, 0x0C);
    return true;
 }
 
@@ -71,11 +67,16 @@ test_header_prepare()
    message.flags = 0x01;
    message.stream = 0x7F;
    message.opcode = 0x00;
-   message.body = new body_error_t(0xFFFFFFFF, (const char*)"foobar", 6);
+   message.body.reset(new body_error_t(0xFFFFFFFF, (const char*)"foobar", 6));
 
-   CHECK(message.prepare_buffer());
-   CHECK_EQUAL(sizeof(TEST_MESSAGE_ERROR), message.buffers.front().len);
-   CHECK_EQUAL(memcmp(TEST_MESSAGE_ERROR, message.buffers.front().base, sizeof(TEST_MESSAGE_ERROR)), 0);
+   std::unique_ptr<char> buffer;
+   char*                 buffer_ptr;
+   size_t                size;
+   CHECK(message.prepare(&buffer_ptr, size));
+   buffer.reset(buffer_ptr);
+
+   CHECK_EQUAL(sizeof(TEST_MESSAGE_ERROR), size);
+   CHECK_EQUAL(memcmp(TEST_MESSAGE_ERROR, buffer.get(), sizeof(TEST_MESSAGE_ERROR)), 0);
    return true;
 }
 

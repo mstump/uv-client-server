@@ -62,10 +62,10 @@ public:
         SSL_load_error_strings();
         SSL_library_init();
         if (client) {
-            _ssl_ctx = SSL_CTX_new(SSLv23_client_method());
+            _ssl_ctx = SSL_CTX_new(TLSv1_method());
         }
         else {
-            _ssl_ctx = SSL_CTX_new(SSLv23_server_method());
+            _ssl_ctx = SSL_CTX_new(TLSv1_method());
         }
 
         // SSL_CTX_set_cipher_list(_ssl_ctx, "TLS_RSA_WITH_AES_256_CBC_SHA");
