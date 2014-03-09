@@ -32,6 +32,7 @@
 #include <uv.h>
 
 #include "common.hpp"
+#include "message.hpp"
 
 struct context_t {
    uv_loop_t* loop;

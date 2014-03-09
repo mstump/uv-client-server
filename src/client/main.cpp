@@ -35,6 +35,7 @@
 
 #include "common.hpp"
 #include "request.hpp"
+#include "message.hpp"
 #include "ssl_session.hpp"
 #include "ssl_context.hpp"
 
@@ -68,7 +69,7 @@ struct client_connection_t {
         CLIENT_STATE_NEW,
         CLIENT_STATE_RESOLVED,
         CLIENT_STATE_CONNECTED,
-        CLIENT_STATE_OPTIONS,
+        CLIENT_STATE_SUPPORTED,
         CLIENT_STATE_READY,
         CLIENT_STATE_DISCONNECTING,
         CLIENT_STATE_DISCONNECTED
@@ -76,25 +77,25 @@ struct client_connection_t {
 
     typedef request_t<message_t, message_t> caller_request_t;
 
-    client_connection_state_t state;
-    context_t*                context;
-    message_t*                incomming;
-    int8_t                    available_streams[STREAM_ID_COUNT];
-    size_t                    available_streams_index;
-    caller_request_t*         callers[STREAM_ID_COUNT];
+    client_connection_state_t  state;
+    context_t*                 context;
+    std::unique_ptr<message_t> incomming;
+    int8_t                     available_streams[STREAM_ID_COUNT];
+    size_t                     available_streams_index;
+    caller_request_t*          callers[STREAM_ID_COUNT];
     // DNS and hostname stuff
-    struct sockaddr_in        address;
-    char*                     address_string[46]; // max length for ipv6
-    int                       address_family;
-    std::string               hostname;
-    std::string               port;
-    uv_getaddrinfo_t          resolver;
-    struct addrinfo           resolver_hints;
+    struct sockaddr_in         address;
+    char*                      address_string[46]; // max length for ipv6
+    int                        address_family;
+    std::string                hostname;
+    std::string                port;
+    uv_getaddrinfo_t           resolver;
+    struct addrinfo            resolver_hints;
     // the actual connection
-    uv_connect_t              connect_request;
-    uv_tcp_t*                 socket;
+    uv_connect_t               connect_request;
+    uv_tcp_t*                  socket;
     // ssl stuff
-    ssl_session_t*            ssl;
+    ssl_session_t*             ssl;
 
     explicit
     client_connection_t(
@@ -141,7 +142,7 @@ struct client_connection_t {
                     send_options();
                 }
                 break;
-            case CLIENT_STATE_OPTIONS:
+            case CLIENT_STATE_SUPPORTED:
                 send_startup();
                 break;
             case CLIENT_STATE_READY:
@@ -157,8 +158,7 @@ struct client_connection_t {
         uv_buf_t buf)
     {
         if (incomming->consume(buf.base, buf.len)) {
-            delete incomming;
-            incomming = new message_t();
+            incomming.reset(new message_t());
         }
     }
 
@@ -209,6 +209,13 @@ struct client_connection_t {
         uv_close(reinterpret_cast<uv_handle_t*>(socket), client_connection_t::on_close);
     }
 
+    void
+    on_supported(
+        message_t* message)
+    {
+        (void) message;
+    }
+
     static void
     on_read(
         uv_stream_t* client,
@@ -226,8 +233,16 @@ struct client_connection_t {
             return;
         }
 
+        // TODO SSL
+        size_t read = connection->incomming->consume(buf.base, buf.len);
+        if (buf.len != read) {
+            // TODO
+            // the existing message got everything it needs, do something with it.
+            connection->incomming.reset(new message_t());
+        }
         // TODO
         free_buffer(buf);
+        connection->event_received();
     }
 
 
