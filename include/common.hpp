@@ -28,6 +28,7 @@
 
 #include <assert.h>
 #include <deque>
+#include <map>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -36,13 +37,15 @@
 
 #define CQL_HEADER_SIZE 8
 
-#define CQL_ERROR_NO_ERROR        0
-#define CQL_ERROR_SSL_CERT        1000000
-#define CQL_ERROR_SSL_PRIVATE_KEY 1000001
-#define CQL_ERROR_SSL_CA_CERT     1000002
-#define CQL_ERROR_SSL_CRL         1000003
-#define CQL_ERROR_SSL_READ        1000004
-#define CQL_ERROR_SSL_WRITE       1000005
+#define CQL_ERROR_NO_ERROR          0
+#define CQL_ERROR_SSL_CERT          1000000
+#define CQL_ERROR_SSL_PRIVATE_KEY   1000001
+#define CQL_ERROR_SSL_CA_CERT       1000002
+#define CQL_ERROR_SSL_CRL           1000003
+#define CQL_ERROR_SSL_READ          1000004
+#define CQL_ERROR_SSL_WRITE         1000005
+#define CQL_ERROR_SSL_READ_WAITING  1000006
+#define CQL_ERROR_SSL_WRITE_WAITING 1000007
 
 #define CQL_OPCODE_ERROR        0x00
 #define CQL_OPCODE_STARTUP      0x01
@@ -150,8 +153,50 @@ encode_string(
     return (char*) memcpy(buffer, input, size) + size;
 }
 
+char*
+encode_string_map(
+    char*                                     output,
+    const std::map<std::string, std::string>& map)
+{
+    char* buffer = encode_short(output, map.size());
+    for (std::map<std::string, std::string>::const_iterator it = map.begin();
+         it != map.end();
+         ++it)
+    {
+        buffer = encode_string(buffer, it->first.c_str(), it->first.size());
+        buffer = encode_string(buffer, it->second.c_str(), it->second.size());
+    }
+    return buffer;
+}
+
+char*
+decode_string_map(
+    char*                               input,
+    std::map<std::string, std::string>& map)
+{
+    map.clear();
+    int16_t len    = 0;
+    char*   buffer = decode_short(input, len);
+
+
+    for (int i = 0; i < len; i++) {
+        char*  key        = 0;
+        size_t key_size   = 0;
+        char*  value      = 0;
+        size_t value_size = 0;
+
+        buffer = decode_string(buffer, &key, key_size);
+        buffer = decode_string(buffer, &value, value_size);
+        map.insert(std::make_pair(std::string(key, key_size), std::string(value, value_size)));
+    }
+    return buffer;
+}
+
 
 struct body_t {
+
+    virtual uint8_t
+    opcode() = 0;
 
     virtual bool
     consume(
@@ -168,6 +213,113 @@ struct body_t {
     ~body_t()
     {}
 
+};
+
+struct body_options_t
+    : public body_t
+{
+
+    body_options_t()
+    {}
+
+    uint8_t
+    opcode()
+    {
+        return CQL_OPCODE_OPTIONS;
+    }
+
+    bool
+    consume(
+        char*  buffer,
+        size_t size)
+    {
+        (void) buffer;
+        (void) size;
+        return true;
+    }
+
+    bool
+    prepare(
+        size_t  reserved,
+        char**  output,
+        size_t& size)
+    {
+        (void) reserved;
+        (void) output;
+        (void) size;
+        return true;
+    }
+
+private:
+    body_options_t(const body_options_t&) {}
+    void operator=(const body_options_t&) {}
+};
+
+struct body_startup_t
+    : public body_t
+{
+    std::unique_ptr<char> guard;
+    std::string           cql_version;
+    std::string           compression;
+
+    body_startup_t() :
+        cql_version("3.0.0"),
+        compression("")
+    {}
+
+    uint8_t
+    opcode()
+    {
+        return CQL_OPCODE_STARTUP;
+    }
+
+    bool
+    consume(
+        char*  buffer,
+        size_t size)
+    {
+        (void) size;
+        std::map<std::string, std::string> options;
+        decode_string_map(buffer, options);
+        std::map<std::string, std::string>::const_iterator it = options.find("COMPRESSION");
+        if (it != options.end()) {
+            compression = it->second;
+        }
+
+        it = options.find("CQL_VERSION");
+        if (it != options.end()) {
+            cql_version = it->second;
+        }
+        return true;
+    }
+
+    bool
+    prepare(
+        size_t  reserved,
+        char**  output,
+        size_t& size)
+    {
+        size = reserved + sizeof(int16_t);
+
+        std::map<std::string, std::string> options;
+        if (!compression.empty()) {
+            size += (sizeof(int16_t) + compression.size());
+            options["COMPRESSION"] = compression;
+        }
+
+        if (!cql_version.empty()) {
+            size += (sizeof(int16_t) + cql_version.size());
+            options["CQL_VERSION"] = cql_version;
+        }
+
+        *output = new char[size];
+        encode_string_map(*output + reserved, options);
+        return true;
+    }
+
+private:
+    body_startup_t(const body_startup_t&) {}
+    void operator=(const body_startup_t&) {}
 };
 
 struct body_error_t
@@ -194,6 +346,12 @@ struct body_error_t
         message_size(input_size)
     {
         memcpy(message, input, input_size);
+    }
+
+    uint8_t
+    opcode()
+    {
+        return CQL_OPCODE_ERROR;
     }
 
     bool
@@ -245,7 +403,7 @@ struct message_t {
     char*                   body_buffer_pos;
 
     message_t() :
-        version(0),
+        version(0x02),
         flags(0),
         stream(0),
         opcode(0),
@@ -255,6 +413,20 @@ struct message_t {
         header_buffer_pos(header_buffer)
     {}
 
+    message_t(
+        uint8_t  opcode) :
+        version(0x02),
+        flags(0),
+        stream(0),
+        opcode(opcode),
+        length(0),
+        received(0),
+        header_received(false),
+        header_buffer_pos(header_buffer)
+    {
+        allocate_body(opcode);
+    }
+
     inline static body_t*
     allocate_body(
         uint8_t  opcode)
@@ -262,6 +434,10 @@ struct message_t {
         switch (opcode) {
             case CQL_OPCODE_ERROR:
                 return static_cast<body_t*>(new body_error_t);
+            case CQL_OPCODE_OPTIONS:
+                return static_cast<body_t*>(new body_options_t);
+            case CQL_OPCODE_STARTUP:
+                return static_cast<body_t*>(new body_startup_t);
             default:
                 return NULL;
         }

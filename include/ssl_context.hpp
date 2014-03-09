@@ -53,13 +53,19 @@ public:
     {}
 
     int
-    init(bool client)
+    init(
+        bool debug,
+        bool client)
     {
-        CRYPTO_malloc_debug_init();
-        CRYPTO_dbg_set_options(V_CRYPTO_MDEBUG_ALL);
-        CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON);
+        if (debug) {
+            CRYPTO_malloc_debug_init();
+            CRYPTO_dbg_set_options(V_CRYPTO_MDEBUG_ALL);
+            CRYPTO_mem_ctrl(CRYPTO_MEM_CHECK_ON);
+        }
 
         SSL_load_error_strings();
+        ERR_load_BIO_strings();
+        OpenSSL_add_all_algorithms();
         SSL_library_init();
         if (client) {
             _ssl_ctx = SSL_CTX_new(TLSv1_method());
@@ -69,7 +75,7 @@ public:
         }
 
         // SSL_CTX_set_cipher_list(_ssl_ctx, "TLS_RSA_WITH_AES_256_CBC_SHA");
-        SSL_CTX_set_cipher_list(_ssl_ctx, "AES256-SHA");
+        SSL_CTX_set_cipher_list(_ssl_ctx, "AES256-SHA:TLSv1+HIGH:!SSLv2:!aNULL:!eNULL:!3DES:@STRENGTH");
         // TLSv1+HIGH:!SSLv2:!aNULL:!eNULL:!3DES:@STRENGTH");
         SSL_CTX_set_verify(_ssl_ctx, SSL_VERIFY_PEER, _verify_callback);
         return CQL_ERROR_NO_ERROR;

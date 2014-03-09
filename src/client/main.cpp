@@ -63,37 +63,51 @@ struct context_t {
 #define CONNECTION_STATE_SSL_NEGOCIATING 5
 
 struct client_connection_t {
+
+    enum client_connection_state_t {
+        CLIENT_STATE_NEW,
+        CLIENT_STATE_RESOLVED,
+        CLIENT_STATE_CONNECTED,
+        CLIENT_STATE_OPTIONS,
+        CLIENT_STATE_READY,
+        CLIENT_STATE_DISCONNECTING,
+        CLIENT_STATE_DISCONNECTED
+    };
+
     typedef request_t<message_t, message_t> caller_request_t;
 
-    context_t*        context;
-    uint64_t          state;
-    message_t*        incomming;
-    int8_t            available_streams[STREAM_ID_COUNT];
-    size_t            available_streams_index;
-    caller_request_t* callers[STREAM_ID_COUNT];
-
+    client_connection_state_t state;
+    context_t*                context;
+    message_t*                incomming;
+    int8_t                    available_streams[STREAM_ID_COUNT];
+    size_t                    available_streams_index;
+    caller_request_t*         callers[STREAM_ID_COUNT];
     // DNS and hostname stuff
-    char*            address[46];
-    int              address_family;
-    std::string      hostname;
-    std::string      port;
-    uv_getaddrinfo_t resolver;
-    struct addrinfo  resolver_hints;
-
+    struct sockaddr_in        address;
+    char*                     address_string[46]; // max length for ipv6
+    int                       address_family;
+    std::string               hostname;
+    std::string               port;
+    uv_getaddrinfo_t          resolver;
+    struct addrinfo           resolver_hints;
     // the actual connection
-    uv_connect_t connect_request;
-    uv_tcp_t*    socket;
+    uv_connect_t              connect_request;
+    uv_tcp_t*                 socket;
+    // ssl stuff
+    ssl_session_t*            ssl;
 
     explicit
     client_connection_t(
         context_t* context) :
+        state(CLIENT_STATE_NEW),
         context(context),
         incomming(new message_t()),
         available_streams_index(STREAM_ID_MAX),
         address_family(PF_INET), // use ipv4 by default
         hostname("localhost"),
         port("9042"),
-        socket(NULL)
+        socket(NULL),
+        ssl(NULL)
     {
         for (int i = STREAM_ID_MIN; i < STREAM_ID_MAX + 1; ++i) {
             available_streams[i - STREAM_ID_MIN] = i;
@@ -106,7 +120,36 @@ struct client_connection_t {
         resolver_hints.ai_socktype = SOCK_STREAM;
         resolver_hints.ai_protocol = IPPROTO_TCP;
         resolver_hints.ai_flags = 0;
-        memset(address, 0, ADDRESS_MAX_LENGTH);
+        memset(address_string, 0, ADDRESS_MAX_LENGTH);
+    }
+
+    void
+    event_received()
+    {
+        switch(state) {
+            case CLIENT_STATE_NEW:
+                hostname_resolve();
+                break;
+            case CLIENT_STATE_RESOLVED:
+                connect();
+                break;
+            case CLIENT_STATE_CONNECTED:
+                if (ssl) {
+                    ssl_handshake();
+                }
+                else {
+                    send_options();
+                }
+                break;
+            case CLIENT_STATE_OPTIONS:
+                send_startup();
+                break;
+            case CLIENT_STATE_READY:
+                // send_messages
+                break;
+            default:
+                break;
+        }
     }
 
     void
@@ -117,6 +160,26 @@ struct client_connection_t {
             delete incomming;
             incomming = new message_t();
         }
+    }
+
+    void
+    ssl_handshake()
+    {
+        ssl->handshake(true);
+    }
+
+    void
+    send_options()
+    {
+        message_t* message = new message_t(CQL_OPCODE_OPTIONS);
+        (void) message;
+    }
+
+    void
+    send_startup()
+    {
+        message_t* message = new message_t(CQL_OPCODE_STARTUP);
+        (void) message;
     }
 
     void
@@ -131,6 +194,44 @@ struct client_connection_t {
     }
 
     static void
+    on_close(
+        uv_handle_t* client)
+    {
+        client_connection_t* connection = reinterpret_cast<client_connection_t*>(client->data);
+        connection->state               = CLIENT_STATE_DISCONNECTED;
+        connection->event_received();
+    }
+
+    void
+    close()
+    {
+        state = CLIENT_STATE_DISCONNECTING;
+        uv_close(reinterpret_cast<uv_handle_t*>(socket), client_connection_t::on_close);
+    }
+
+    static void
+    on_read(
+        uv_stream_t* client,
+        ssize_t      nread,
+        uv_buf_t     buf)
+    {
+        client_connection_t* connection = reinterpret_cast<client_connection_t*>(client->data);
+        context_t*           context    = connection->context;
+
+        if (nread == -1) {
+            if (uv_last_error(context->loop).code != UV_EOF) {
+                fprintf(stderr, "Read error %s\n", uv_err_name(uv_last_error(context->loop)));
+            }
+            connection->close();
+            return;
+        }
+
+        // TODO
+        free_buffer(buf);
+    }
+
+
+    static void
     on_connect(
         uv_connect_t *request,
         int           status)
@@ -141,7 +242,19 @@ struct client_connection_t {
             fprintf(stderr, "connect failed error %s\n", uv_err_name(uv_last_error(connection->context->loop)));
             return;
         }
-        // TODO do something uv_read_start((uv_stream_t*) req->data, alloc_buffer, on_read);
+
+        uv_read_start((uv_stream_t*) request->data, alloc_buffer, on_read);
+        connection->state = CLIENT_STATE_CONNECTED;
+        connection->event_received();
+    }
+
+    void
+    connect()
+    {
+        // connect to the resolved host
+        socket = new uv_tcp_t;
+        uv_tcp_init(context->loop, socket);
+        uv_tcp_connect(&connect_request, socket, address, client_connection_t::on_connect);
     }
 
     static void
@@ -159,17 +272,20 @@ struct client_connection_t {
 
         // store the human readable address
         if (res->ai_family == AF_INET) {
-            uv_ip4_name((struct sockaddr_in*) res->ai_addr, (char*) connection->address, ADDRESS_MAX_LENGTH);
+            uv_ip4_name((struct sockaddr_in*) res->ai_addr,
+                        (char*) connection->address_string,
+                        ADDRESS_MAX_LENGTH);
         }
         else if (res->ai_family == AF_INET6) {
-            uv_ip6_name((struct sockaddr_in6*) res->ai_addr, (char*) connection->address, ADDRESS_MAX_LENGTH);
+            uv_ip6_name((struct sockaddr_in6*) res->ai_addr,
+                        (char*) connection->address_string,
+                        ADDRESS_MAX_LENGTH);
         }
-
-        // connect to the resolved host
-        connection->socket = new uv_tcp_t;
-        uv_tcp_init(connection->context->loop, connection->socket);
-        uv_tcp_connect(&connection->connect_request, connection->socket, *(struct sockaddr_in*) res->ai_addr, client_connection_t::on_connect);
+        connection->address = *(struct sockaddr_in*) res->ai_addr;
         uv_freeaddrinfo(res);
+
+        connection->state = CLIENT_STATE_RESOLVED;
+        connection->event_received();
     }
 
     void
@@ -234,10 +350,10 @@ on_new_connection(
 int
 main() {
     ssl_context_t ssl_client_context;
-    ssl_client_context.init(true);
+    ssl_client_context.init(true, true);
 
     ssl_context_t ssl_server_context;
-    ssl_server_context.init(false);
+    ssl_server_context.init(true, false);
 
     RSA* rsa = ssl_context_t::create_key(2048);
     if (!rsa) {
