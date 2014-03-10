@@ -79,11 +79,13 @@ struct message_t {
     {
         switch (opcode) {
             case CQL_OPCODE_ERROR:
-                return static_cast<body_t*>(new body_error_t);
+                return static_cast<body_t*>(new body_error_t());
             case CQL_OPCODE_OPTIONS:
-                return static_cast<body_t*>(new body_options_t);
+                return static_cast<body_t*>(new body_options_t());
             case CQL_OPCODE_STARTUP:
-                return static_cast<body_t*>(new body_startup_t);
+                return static_cast<body_t*>(new body_startup_t());
+            case CQL_OPCODE_SUPPORTED:
+                return static_cast<body_t*>(new body_supported_t());
             default:
                 return NULL;
         }

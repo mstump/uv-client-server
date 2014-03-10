@@ -23,15 +23,16 @@
 
 // For more information, please refer to <http://unlicense.org/>
 
-#ifndef __BODY_ERROR_HPP_INCLUDED__
-#define __BODY_ERROR_HPP_INCLUDED__
+#ifndef __BODY_SUPPORTED_HPP_INCLUDED__
+#define __BODY_SUPPORTED_HPP_INCLUDED__
 
 #include "body.hpp"
 
 struct body_supported_t
     : public body_t
 {
-    string_multimap_t supported;
+    std::list<std::string> compression;
+    std::list<std::string> cql_versions;
 
     body_supported_t()
     {}
@@ -48,7 +49,18 @@ struct body_supported_t
         size_t size)
     {
         (void) size;
+        string_multimap_t supported;
+
         decode_string_multimap(buffer, supported);
+        string_multimap_t::const_iterator it = supported.find("COMPRESSION");
+        if (it != supported.end()) {
+            compression = it->second;
+        }
+
+        it = supported.find("CQL_VERSION");
+        if (it != supported.end()) {
+            cql_versions = it->second;
+        }
         return true;
     }
 
