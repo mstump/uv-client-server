@@ -92,6 +92,8 @@ struct message_t {
                 return static_cast<body_t*>(new body_startup_t());
             case CQL_OPCODE_SUPPORTED:
                 return static_cast<body_t*>(new body_supported_t());
+            case CQL_OPCODE_QUERY:
+                return static_cast<body_t*>(new body_query_t());
             case CQL_OPCODE_READY:
                 return static_cast<body_t*>(new body_ready_t());
             default:

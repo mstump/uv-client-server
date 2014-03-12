@@ -26,6 +26,7 @@
 #ifndef __QUERY_HPP_INCLUDED__
 #define __QUERY_HPP_INCLUDED__
 
+#include <vector>
 #include "body.hpp"
 
 #define CQL_QUERY_FLAG_VALUES             0x01
@@ -45,8 +46,7 @@ private:
     int16_t            _consistency;
     size_t             _page_size;
     bool               _page_size_set;
-    char*              _paging_state;
-    size_t             _paging_state_size;
+    std::vector<char>  _paging_state;
     bool               _serial_consistent;
     int16_t            _serial_consistency;
     value_collection_t _values;
@@ -56,21 +56,29 @@ public:
         _consistency(CQL_CONSISTENCY_ANY),
         _page_size(0),
         _page_size_set(false),
-        _paging_state(NULL),
-        _paging_state_size(0),
         _serial_consistent(false),
         _serial_consistency(CQL_CONSISTENCY_SERIAL)
     {}
-
-    ~body_query_t()
-    {
-        delete _paging_state;
-    }
 
     uint8_t
     opcode()
     {
         return CQL_OPCODE_QUERY;
+    }
+
+    void
+    query_string(
+        char*  input,
+        size_t size)
+    {
+        _query.assign(input, size);
+    }
+
+    void
+    query_string(
+        const std::string& input)
+    {
+        _query = input;
     }
 
     void
@@ -82,12 +90,12 @@ public:
     }
 
     void
-    page_state(
+    paging_state(
         const char* state,
         size_t      size)
     {
-        memcpy(_paging_state, state, size);
-        _paging_state_size = size;
+        _paging_state.resize(size);
+        _paging_state.assign(state, state + size);
     }
 
     void
@@ -137,9 +145,9 @@ public:
             size  += sizeof(int16_t);
         }
 
-        if (_paging_state) {
+        if (!_paging_state.empty()) {
             flags |= CQL_QUERY_FLAG_PAGING_STATE;
-            size += _paging_state_size;
+            size += (sizeof(int16_t) + _paging_state.size());
         }
 
         if (!_values.empty()) {
@@ -163,7 +171,7 @@ public:
         }
 
         *output = new char[size];
-        char* buffer = encode_long_string(*output, _query.c_str(), _query.size());
+        char* buffer = encode_long_string(*output + reserved, _query.c_str(), _query.size());
         buffer = encode_short(buffer, _consistency);
         buffer = encode_byte(buffer, flags);
 
@@ -181,8 +189,8 @@ public:
             buffer = encode_int(buffer, _page_size);
         }
 
-        if (_paging_state) {
-            buffer = encode_string(buffer, _paging_state, _paging_state_size);
+        if (!_paging_state.empty()) {
+            buffer = encode_string(buffer, &_paging_state[0], _paging_state.size());
         }
 
         if (_serial_consistent) {

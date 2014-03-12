@@ -321,8 +321,10 @@ struct client_connection_t {
             event_received();
         }
         context->log(CQL_LOG_DEBUG, "set_keyspace");
-        // message_t message(CQL_OPCODE_OPTIONS);
-        // send_message(&message);
+        message_t     message(CQL_OPCODE_QUERY);
+        body_query_t* query = static_cast<body_query_t*>(message.body.get());
+        query->query_string("select * from system.peers;");
+        send_message(&message);
     }
 
     void
