@@ -26,7 +26,16 @@
 #ifndef __SERIALIZATION_HPP_INCLUDED__
 #define __SERIALIZATION_HPP_INCLUDED__
 
-char*
+inline char*
+encode_byte(
+    char*   output,
+    uint8_t value)
+{
+    *output = value;
+    return output + 1;
+}
+
+inline char*
 decode_short(
     char*    input,
     int16_t& output)
@@ -35,7 +44,7 @@ decode_short(
     return input + sizeof(int16_t);
 }
 
-char*
+inline char*
 encode_short(
     char*   output,
     int16_t value)
@@ -44,7 +53,7 @@ encode_short(
     return (char*) memcpy(output, &net_value, sizeof(net_value)) + sizeof(int16_t);
 }
 
-char*
+inline char*
 decode_int(
     char*    input,
     int32_t& output)
@@ -53,7 +62,7 @@ decode_int(
     return input + sizeof(int32_t);
 }
 
-char*
+inline char*
 encode_int(
     char*   output,
     int32_t value)
@@ -62,7 +71,7 @@ encode_int(
     return (char*) memcpy(output, &net_value, sizeof(net_value)) + sizeof(int32_t);
 }
 
-char*
+inline char*
 decode_string(
     char*   input,
     char**  output,
@@ -72,7 +81,7 @@ decode_string(
     return *output + size;
 }
 
-char*
+inline char*
 encode_string(
     char*       output,
     const char* input,
@@ -82,7 +91,17 @@ encode_string(
     return (char*) memcpy(buffer, input, size) + size;
 }
 
-char*
+inline char*
+encode_long_string(
+    char*       output,
+    const char* input,
+    size_t      size)
+{
+    char* buffer = encode_int(output, size);
+    return (char*) memcpy(buffer, input, size) + size;
+}
+
+inline char*
 encode_string_map(
     char*                                     output,
     const std::map<std::string, std::string>& map)
@@ -98,7 +117,7 @@ encode_string_map(
     return buffer;
 }
 
-char*
+inline char*
 decode_string_map(
     char*                               input,
     std::map<std::string, std::string>& map)
@@ -121,7 +140,7 @@ decode_string_map(
     return buffer;
 }
 
-char*
+inline char*
 decode_stringlist(
     char*                   input,
     std::list<std::string>& output)
@@ -142,7 +161,7 @@ decode_stringlist(
 
 typedef std::map<std::string, std::list<std::string> > string_multimap_t;
 
-char*
+inline char*
 decode_string_multimap(
     char*              input,
     string_multimap_t& output)

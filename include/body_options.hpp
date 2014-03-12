@@ -57,9 +57,8 @@ struct body_options_t
         char**  output,
         size_t& size)
     {
-        (void) reserved;
-        (void) output;
-        (void) size;
+        *output = new char[size];
+        size = reserved;
         return true;
     }
 

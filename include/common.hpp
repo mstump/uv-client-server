@@ -36,7 +36,10 @@
 #include <thread>
 #include <uv.h>
 
-#define CQL_HEADER_SIZE 8
+#define CQL_LOG_CRITICAL 0x00
+#define CQL_LOG_ERROR    0x01
+#define CQL_LOG_INFO     0x02
+#define CQL_LOG_DEBUG    0x03
 
 #define CQL_ERROR_NO_ERROR          0
 #define CQL_ERROR_SSL_CERT          1000000
@@ -47,6 +50,7 @@
 #define CQL_ERROR_SSL_WRITE         1000005
 #define CQL_ERROR_SSL_READ_WAITING  1000006
 #define CQL_ERROR_SSL_WRITE_WAITING 1000007
+#define CQL_ERROR_NO_STREAMS        1000008
 
 #define CQL_OPCODE_ERROR        0x00
 #define CQL_OPCODE_STARTUP      0x01
@@ -61,6 +65,18 @@
 #define CQL_OPCODE_EXECUTE      0x0A
 #define CQL_OPCODE_REGISTER     0x0B
 #define CQL_OPCODE_EVENT        0x0C
+
+#define CQL_CONSISTENCY_ANY          0x0000
+#define CQL_CONSISTENCY_ONE          0x0001
+#define CQL_CONSISTENCY_TWO          0x0002
+#define CQL_CONSISTENCY_THREE        0x0003
+#define CQL_CONSISTENCY_QUORUM       0x0004
+#define CQL_CONSISTENCY_ALL          0x0005
+#define CQL_CONSISTENCY_LOCAL_QUORUM 0x0006
+#define CQL_CONSISTENCY_EACH_QUORUM  0x0007
+#define CQL_CONSISTENCY_SERIAL       0x0008
+#define CQL_CONSISTENCY_LOCAL_SERIAL 0x0009
+#define CQL_CONSISTENCY_LOCAL_ONE    0x000A
 
 uv_buf_t
 alloc_buffer(

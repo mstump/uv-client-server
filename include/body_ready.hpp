@@ -23,27 +23,22 @@
 
 // For more information, please refer to <http://unlicense.org/>
 
-#ifndef __BODY_STARTUP_HPP_INCLUDED__
-#define __BODY_STARTUP_HPP_INCLUDED__
+#ifndef __READY_HPP_INCLUDED__
+#define __READY_HPP_INCLUDED__
 
 #include "body.hpp"
 
-struct body_startup_t
+struct body_ready_t
     : public body_t
 {
-    std::unique_ptr<char> guard;
-    std::string           cql_version;
-    std::string           compression;
 
-    body_startup_t() :
-        cql_version("3.0.0"),
-        compression("")
+    body_ready_t()
     {}
 
     uint8_t
     opcode()
     {
-        return CQL_OPCODE_STARTUP;
+        return CQL_OPCODE_READY;
     }
 
     bool
@@ -51,18 +46,8 @@ struct body_startup_t
         char*  buffer,
         size_t size)
     {
+        (void) buffer;
         (void) size;
-        std::map<std::string, std::string> options;
-        decode_string_map(buffer, options);
-        std::map<std::string, std::string>::const_iterator it = options.find("COMPRESSION");
-        if (it != options.end()) {
-            compression = it->second;
-        }
-
-        it = options.find("CQL_VERSION");
-        if (it != options.end()) {
-            cql_version = it->second;
-        }
         return true;
     }
 
@@ -72,31 +57,14 @@ struct body_startup_t
         char**  output,
         size_t& size)
     {
-        size = reserved + sizeof(int16_t);
-
-        std::map<std::string, std::string> options;
-        if (!compression.empty()) {
-            const char* key = "COMPRESSION";
-            size += (sizeof(int16_t) + strlen(key));
-            size += (sizeof(int16_t) + compression.size());
-            options[key] = compression;
-        }
-
-        if (!cql_version.empty()) {
-            const char* key = "CQL_VERSION";
-            size += (sizeof(int16_t) + strlen(key));
-            size += (sizeof(int16_t) + cql_version.size());
-            options[key] = cql_version;
-        }
-
         *output = new char[size];
-        encode_string_map(*output + reserved, options);
+        size = reserved;
         return true;
     }
 
 private:
-    body_startup_t(const body_startup_t&) {}
-    void operator=(const body_startup_t&) {}
+    body_ready_t(const body_ready_t&) {}
+    void operator=(const body_ready_t&) {}
 };
 
 #endif

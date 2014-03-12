@@ -28,8 +28,12 @@
 
 #include "body_error.hpp"
 #include "body_options.hpp"
+#include "body_query.hpp"
+#include "body_ready.hpp"
 #include "body_startup.hpp"
 #include "body_supported.hpp"
+
+#define CQL_HEADER_SIZE 8
 
 struct message_t {
 
@@ -47,6 +51,7 @@ struct message_t {
     std::unique_ptr<body_t> body;
     std::unique_ptr<char>   body_buffer;
     char*                   body_buffer_pos;
+    bool                    body_ready;
 
     message_t() :
         version(0x02),
@@ -56,7 +61,8 @@ struct message_t {
         length(0),
         received(0),
         header_received(false),
-        header_buffer_pos(header_buffer)
+        header_buffer_pos(header_buffer),
+        body_ready(false)
     {}
 
     message_t(
@@ -68,10 +74,10 @@ struct message_t {
         length(0),
         received(0),
         header_received(false),
-        header_buffer_pos(header_buffer)
-    {
-        allocate_body(opcode);
-    }
+        header_buffer_pos(header_buffer),
+        body(allocate_body(opcode)),
+        body_ready(false)
+    {}
 
     inline static body_t*
     allocate_body(
@@ -86,8 +92,10 @@ struct message_t {
                 return static_cast<body_t*>(new body_startup_t());
             case CQL_OPCODE_SUPPORTED:
                 return static_cast<body_t*>(new body_supported_t());
+            case CQL_OPCODE_READY:
+                return static_cast<body_t*>(new body_ready_t());
             default:
-                return NULL;
+                assert(false);
         }
     }
 
@@ -98,24 +106,23 @@ struct message_t {
     {
         size = 0;
         if (body.get()) {
-            if (body->prepare(CQL_HEADER_SIZE, output, size)) {
+            body->prepare(CQL_HEADER_SIZE, output, size);
 
-                if (!size) {
-                    *output = new char[CQL_HEADER_SIZE];
-                    size = CQL_HEADER_SIZE;
-                }
-                else {
-                    length = size - CQL_HEADER_SIZE;
-                }
-
-                uint8_t* buffer = (uint8_t*) *output;
-                buffer[0]       = version;
-                buffer[1]       = flags;
-                buffer[2]       = stream;
-                buffer[3]       = opcode;
-                encode_int((char*)(buffer + 4), length);
-                return true;
+            if (!size) {
+                *output = new char[CQL_HEADER_SIZE];
+                size = CQL_HEADER_SIZE;
             }
+            else {
+                length = size - CQL_HEADER_SIZE;
+            }
+
+            uint8_t* buffer = (uint8_t*) *output;
+            buffer[0]       = version;
+            buffer[1]       = flags;
+            buffer[2]       = stream;
+            buffer[3]       = opcode;
+            encode_int((char*)(buffer + 4), length);
+            return true;
         }
         return false;
     }
@@ -127,7 +134,7 @@ struct message_t {
      *
      * @return how many bytes copied
      */
-    size_t
+    int
     consume(
         char*  input,
         size_t size)
@@ -182,7 +189,7 @@ struct message_t {
             if (!body->consume(body_buffer.get() + CQL_HEADER_SIZE, length)) {
                 return -1;
             }
-
+            body_ready = true;
         }
         else {
             // we haven't received all the data yet, copy the entire input to our buffer
