@@ -26,7 +26,6 @@
 #ifndef __SSL_SESSION_HPP_INCLUDED__
 #define __SSL_SESSION_HPP_INCLUDED__
 
-#include <deque>
 #include <openssl/ssl.h>
 #include <openssl/engine.h>
 #include <openssl/err.h>
@@ -38,149 +37,141 @@
 #include <openssl/rand.h>
 #include <openssl/pkcs12.h>
 
+#include <deque>
+
 #define BUFFER_SIZE 4096
 
-class ssl_session_t {
-    SSL* ssl;
-    BIO* read_bio;
-    BIO* write_bio;
+class SSLSession {
+  SSL* ssl;
+  BIO* read_bio;
+  BIO* write_bio;
 
-public:
-    ssl_session_t(
-        SSL_CTX* ctx) :
-        ssl(SSL_new(ctx)),
-        read_bio(BIO_new(BIO_s_mem())),
-        write_bio(BIO_new(BIO_s_mem()))
-    {}
+ public:
+  SSLSession(
+      SSL_CTX* ctx) :
+      ssl(SSL_new(ctx)),
+      read_bio(BIO_new(BIO_s_mem())),
+      write_bio(BIO_new(BIO_s_mem()))
+  {}
 
-    ~ssl_session_t()
-    {
-        SSL_shutdown(ssl);
-        SSL_free(ssl);
+  ~SSLSession() {
+    SSL_shutdown(ssl);
+    SSL_free(ssl);
+  }
+
+  void
+  handshake(
+      bool client) {
+    if (client) {
+      SSL_set_connect_state(ssl);
+    } else {
+      SSL_set_accept_state(ssl);
+    }
+    SSL_set_bio(ssl, read_bio, write_bio);
+  }
+
+  bool
+  handshake_done() {
+    return SSL_is_init_finished(ssl);
+  }
+
+  char*
+  ciphers(
+      char* output,
+      size_t size) {
+    SSL_CIPHER* sc = SSL_get_current_cipher(ssl);
+    return SSL_CIPHER_description(sc, output, size);
+  }
+
+  int
+  read_write(
+      const std::deque<uv_buf_t>& read_input,
+      std::deque<uv_buf_t>&       read_output,
+      const std::deque<uv_buf_t>& write_input,
+      std::deque<uv_buf_t>&       write_output) {
+    for (std::deque<uv_buf_t>::const_iterator it = read_input.begin();
+         it != read_input.end();
+         ++it) {
+      int written = BIO_write(read_bio, it->base, it->len);
+      if (!check_error(written)) {
+        return CQL_ERROR_SSL_READ;
+      }
     }
 
-    void
-    handshake(
-        bool client)
-    {
-        if (client) {
-            SSL_set_connect_state(ssl);
-        }
-        else {
-            SSL_set_accept_state(ssl);
-        }
-        SSL_set_bio(ssl, read_bio, write_bio);
+    for (std::deque<uv_buf_t>::const_iterator it = write_input.begin();
+         it != write_input.end();
+         ++it) {
+      int written = SSL_write(ssl, it->base, it->len);
+      if (!check_error(written)) {
+        return CQL_ERROR_SSL_WRITE;
+      }
     }
 
-    bool
-    handshake_done()
-    {
-        return SSL_is_init_finished(ssl);
+    for (;;) {
+      uv_buf_t buf = alloc_buffer(BUFFER_SIZE);
+      int read = SSL_read(ssl, buf.base, buf.len);
+
+      if (!check_error(read)) {
+        free_buffer(buf);
+        return CQL_ERROR_SSL_READ;
+      }
+
+      if (read > 0) {
+        buf.len = read;
+        read_output.push_back(buf);
+      }
+      free_buffer(buf);
+
+      if (read != BUFFER_SIZE || read == 0) {
+        break;
+      }
     }
 
-    char*
-    ciphers(
-        char* output,
-        size_t size)
-    {
-        SSL_CIPHER* sc = SSL_get_current_cipher(ssl);
-        return SSL_CIPHER_description(sc, output, size);
+    for (;;) {
+      uv_buf_t buf = alloc_buffer(BUFFER_SIZE);
+      int read = BIO_read(write_bio, buf.base, buf.len);
+
+      if (read > 0) {
+        buf.len = read;
+        write_output.push_back(buf);
+      }
+      free_buffer(buf);
+
+      if (read != BUFFER_SIZE || read == 0) {
+        break;
+      }
+    }
+    return CQL_ERROR_NO_ERROR;
+  }
+
+  bool
+  check_error(
+      int input) {
+    int err = SSL_get_error(ssl, input);
+    if (err == SSL_ERROR_NONE || err == SSL_ERROR_WANT_READ) {
+      return true;
     }
 
-    int
-    read_write(
-        const std::deque<uv_buf_t>& read_input,
-        std::deque<uv_buf_t>&       read_output,
-        const std::deque<uv_buf_t>& write_input,
-        std::deque<uv_buf_t>&       write_output)
-    {
-        for (std::deque<uv_buf_t>::const_iterator it = read_input.begin();
-             it != read_input.end();
-             ++it)
-        {
-            int written = BIO_write(read_bio, it->base, it->len);
-            if (!check_error(written)) {
-                return CQL_ERROR_SSL_READ;
-            }
-        }
-
-        for (std::deque<uv_buf_t>::const_iterator it = write_input.begin();
-             it != write_input.end();
-             ++it)
-        {
-            int written = SSL_write(ssl, it->base, it->len);
-            if (!check_error(written)) {
-                return CQL_ERROR_SSL_WRITE;
-            }
-        }
-
-        for (;;) {
-            uv_buf_t buf = alloc_buffer(BUFFER_SIZE);
-            int read = SSL_read(ssl, buf.base, buf.len);
-
-            if (!check_error(read)) {
-                free_buffer(buf);
-                return CQL_ERROR_SSL_READ;
-            }
-
-            if (read > 0 ) {
-                buf.len = read;
-                read_output.push_back(buf);
-            }
-            free_buffer(buf);
-
-            if (read != BUFFER_SIZE || read == 0) {
-                break;
-            }
-        }
-
-        for (;;) {
-            uv_buf_t buf = alloc_buffer(BUFFER_SIZE);
-            int read = BIO_read(write_bio, buf.base, buf.len);
-
-            if (read > 0) {
-                buf.len = read;
-                write_output.push_back(buf);
-            }
-            free_buffer(buf);
-
-            if (read != BUFFER_SIZE || read == 0) {
-                break;
-            }
-        }
-        return CQL_ERROR_NO_ERROR;
+    if (err == SSL_ERROR_SYSCALL) {
+      return false;
     }
 
-    bool
-    check_error(
-        int input)
-    {
-        int err = SSL_get_error(ssl, input);
-        if (err == SSL_ERROR_NONE || err == SSL_ERROR_WANT_READ) {
-            return true;
-        }
-
-        if (err == SSL_ERROR_SYSCALL) {
-            return false;
-        }
-
-        if (err == SSL_ERROR_SSL) {
-            return false;
-        }
-        return true;
+    if (err == SSL_ERROR_SSL) {
+      return false;
     }
+    return true;
+  }
 
-    // c->ssl = SSL_new(c->ssl_ctx);
-    // c->read_bio = BIO_new(BIO_s_mem());
-    // c->write_bio = BIO_new(BIO_s_mem());
-    // SSL_set_bio(c->ssl, c->read_bio, c->write_bio);
-    // SSL_set_connect_state(c->ssl);
+  // c->ssl = SSL_new(c->ssl_ctx);
+  // c->read_bio = BIO_new(BIO_s_mem());
+  // c->write_bio = BIO_new(BIO_s_mem());
+  // SSL_set_bio(c->ssl, c->read_bio, c->write_bio);
+  // SSL_set_connect_state(c->ssl);
 
-    // r = SSL_do_handshake(c->ssl);
+  // r = SSL_do_handshake(c->ssl);
 
-    // if(!SSL_is_init_finished(c->ssl)) {
-    //    int r = SSL_connect(c->ssl);
-
+  // if(!SSL_is_init_finished(c->ssl)) {
+  //    int r = SSL_connect(c->ssl);
 };
 
 #endif

@@ -27,14 +27,16 @@
 #define __COMMON_HPP_INCLUDED__
 
 #include <assert.h>
-#include <deque>
-#include <list>
-#include <map>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <thread>
 #include <uv.h>
+
+#include <thread>
+#include <deque>
+#include <list>
+#include <map>
+#include <string>
 
 #define CQL_LOG_CRITICAL 0x00
 #define CQL_LOG_ERROR    0x01
@@ -80,35 +82,30 @@
 
 uv_buf_t
 alloc_buffer(
-    size_t suggested_size)
-{
+    size_t suggested_size) {
     return uv_buf_init(new char[suggested_size], suggested_size);
 }
 
 uv_buf_t
 alloc_buffer(
     uv_handle_t *handle,
-    size_t       suggested_size)
-{
+    size_t       suggested_size) {
     (void) handle;
     return alloc_buffer(suggested_size);
 }
 
 void
 free_buffer(
-    uv_buf_t buf)
-{
+    uv_buf_t buf) {
     delete buf.base;
 }
 
 void
 clear_buffer_deque(
-    std::deque<uv_buf_t>& buffers)
-{
+    std::deque<uv_buf_t>& buffers) {
     for (std::deque<uv_buf_t>::iterator it = buffers.begin();
          it != buffers.end();
-         ++it)
-    {
+         ++it) {
         free_buffer(*it);
     }
     buffers.clear();

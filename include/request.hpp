@@ -31,113 +31,116 @@
 
 template<typename Work,
          typename Result>
-struct request_t {
+struct Request {
+  typedef std::function<void(Request<Work, Result>*)> callable_t;
 
-    typedef std::function<void(request_t<Work,Result>*)> callable_t;
-
-    std::atomic<bool>       flag;
-    std::mutex              mutex;
-    std::condition_variable condition;
-    Work                    work;
-    Result                  result;
-    int                     error;
-    callable_t              callback;
-    uv_work_t               uv_work_req;
+  std::atomic<bool>       flag;
+  std::mutex              mutex;
+  std::condition_variable condition;
+  Work                    work;
+  Result                  result;
+  int                     error;
+  callable_t              callback;
+  uv_work_t               uv_work_req;
 
 
-    request_t() :
-        flag(false),
-        error(CQL_ERROR_NO_ERROR),
-        callback(NULL)
-    {}
+  Request() :
+      flag(false),
+      error(CQL_ERROR_NO_ERROR),
+      callback(NULL)
+  {}
 
-    bool
-    ready()
-    {
-        return flag.load(std::memory_order_consume);
+  bool
+  ready() {
+    return flag.load(std::memory_order_consume);
+  }
+
+  /**
+   * call to set the ready condition to true and notify interested parties
+   * threads blocking on wait or wait_for will be woken up and resumed
+   * if the caller specified a callback it will be triggered
+   *
+   * be sure to set the value of result prior to calling notify
+   *
+   * we execute the callback in a separate thread so that badly
+   * behaving client code can't interfere with event/network handling
+   *
+   * @param loop the libuv event loop
+   */
+  void
+  notify(
+      uv_loop_t* loop) {
+    flag.store(true, std::memory_order_release);
+    condition.notify_all();
+
+    if (callback) {
+      // we execute the callback in a separate thread so that badly
+      // behaving client code can't interfere with event/network handling
+      uv_work_req.data = this;
+      uv_queue_work(
+          loop,
+          &uv_work_req,
+          &Request<Work, Result>::callback_executor,
+          NULL);
     }
+  }
 
-    /**
-     * call to set the ready condition to true and notify interested parties
-     * threads blocking on wait or wait_for will be woken up and resumed
-     * if the caller specified a callback it will be triggered
-     *
-     * be sure to set the value of result prior to calling notify
-     *
-     * we execute the callback in a separate thread so that badly
-     * behaving client code can't interfere with event/network handling
-     *
-     * @param loop the libuv event loop
-     */
-    void
-    notify(
-        uv_loop_t* loop)
-    {
-        flag.store(true, std::memory_order_release);
-        condition.notify_all();
-
-        if (callback) {
-            // we execute the callback in a separate thread so that badly
-            // behaving client code can't interfere with event/network handling
-            uv_work_req.data = this;
-            uv_queue_work(loop, &uv_work_req, &request_t<Work, Result>::callback_executor, NULL);
-        }
+  /**
+   * wait until the ready condition is met and results are ready
+   */
+  void
+  wait() {
+    if (!flag.load(std::memory_order_consume)) {
+      std::unique_lock<std::mutex> lock(mutex);
+      condition.wait(lock, std::bind(&Request<Work, Result>::ready, this));
     }
+  }
 
-    /**
-     * wait until the ready condition is met and results are ready
-     */
-    void
-    wait()
-    {
-        if (!flag.load(std::memory_order_consume)) {
-            std::unique_lock<std::mutex> lock(mutex);
-            condition.wait(lock, std::bind(&request_t<Work, Result>::ready, this));
-        }
+  /**
+   * wait until the ready condition is met, or specified time has elapsed.
+   * return value indicates false for timeout
+   *
+   * @param time
+   *
+   * @return false for timeout, true if value is ready
+   */
+  template< class Rep, class Period >
+  bool
+  wait_for(
+      const std::chrono::duration<Rep, Period>& time) {
+    if (!flag.load(std::memory_order_consume)) {
+      std::unique_lock<std::mutex> lock(mutex);
+      return condition.wait_for(
+          lock,
+          time,
+          std::bind(&Request<Work, Result>::ready, this));
     }
+  }
 
-    /**
-     * wait until the ready condition is met, or specified time has elapsed.
-     * return value indicates false for timeout
-     *
-     * @param time
-     *
-     * @return false for timeout, true if value is ready
-     */
-    template< class Rep, class Period >
-    bool
-    wait_for(
-        const std::chrono::duration<Rep, Period>& time)
-    {
-        if (!flag.load(std::memory_order_consume)) {
-            std::unique_lock<std::mutex> lock(mutex);
-            return condition.wait_for(lock, time, std::bind(&request_t<Work, Result>::ready, this));
-        }
+ private:
+  /**
+   * Called by the libuv worker thread, and this method calls the callback
+   * this is done to isolate customer code from ours
+   *
+   * @param work
+   */
+  static void
+  callback_executor(
+      uv_work_t* work) {
+    (void) work;
+    if (work && work->data) {
+      Request<Work, Result>* request
+          = reinterpret_cast<Request<Work, Result>*>(work->data);
+
+      if (request->callback) {
+        request->callback(request);
+      }
     }
+  }
 
-private:
-    /**
-     * Called by the libuv worker thread, and this method calls the callback
-     * this is done to isolate customer code from ours
-     *
-     * @param work
-     */
-    static void
-    callback_executor(
-        uv_work_t* work)
-    {
-        (void) work;
-        if (work && work->data) {
-            request_t<Work,Result>* request = (request_t<Work,Result>*) work->data;
-            if (request->callback) {
-                request->callback(request);
-            }
-        }
-    }
-
-    // don't allow copy
-    request_t(request_t&) {}
-    void operator=(const request_t&) {}
+  // don't allow copy
+  Request(Request&) {}
+  void operator=(const Request&) {}
 };
 
 #endif

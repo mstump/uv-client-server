@@ -23,53 +23,54 @@
 
 // For more information, please refer to <http://unlicense.org/>
 
-#include <iostream>
 #include <stdio.h>
+#include <iostream>
 
 #include "common.hpp"
 #include "message.hpp"
 
 char TEST_MESSAGE_ERROR[] = {
-    0x81, 0x01, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x0C, // header
-    0xFF, 0xFF, 0xFF, 0xFF,                         // error code
-    0x00, 0x06, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72  // message
+    0x81, 0x01, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x0C,  // header
+    0xFF, 0xFF, 0xFF, 0xFF,                          // error code
+    0x00, 0x06, 0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72   // message
 };
 
 char TEST_MESSAGE_OPTIONS[] = {
-    0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00  // header
+    0x02, 0x00, 0x00, 0x05, 0x00, 0x00, 0x00, 0x00   // header
 };
 
 char TEST_MESSAGE_STARTUP[] = {
-    0x02, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x16, // header
-    0x00, 0x01,                                     // 1 entry
-    0x00, 0x0b, 0x43, 0x51, 0x4c, 0x5f, 0x56, 0x45, 0x52, 0x53, 0x49, 0x4f, 0x4e, // CQL_VERSION
-    0x00, 0x05, 0x33, 0x2e, 0x30, 0x2e, 0x30        // 3.0.0
+    0x02, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x16,  // header
+    0x00, 0x01,                                      // 1 entry
+    0x00, 0x0b, 0x43, 0x51, 0x4c, 0x5f, 0x56, 0x45,  // CQL_VERSION
+    0x52, 0x53, 0x49, 0x4f, 0x4e,
+    0x00, 0x05, 0x33, 0x2e, 0x30, 0x2e, 0x30         // 3.0.0
 };
 
 char TEST_MESSAGE_QUERY[] = {
-    0x02, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x22, // header
-    0x00, 0x00, 0x00, 0x1b,                         // string length (27)
-    0x53, 0x45, 0x4c, 0x45, 0x43, 0x54,             // SELECT
-    0x20, 0x2a, 0x20,                               //  *
-    0x46, 0x52, 0x4f, 0x4d, 0x20,                   // FROM
-    0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e,       // peers;
-    0x70, 0x65, 0x65, 0x72, 0x73, 0x3b,             // system.peers;
-    0x00, 0x01,                                     // consistency
-    0x00                                            // flags
+    0x02, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x22,  // header
+    0x00, 0x00, 0x00, 0x1b,                          // string length (27)
+    0x53, 0x45, 0x4c, 0x45, 0x43, 0x54,              // SELECT
+    0x20, 0x2a, 0x20,                                //  *
+    0x46, 0x52, 0x4f, 0x4d, 0x20,                    // FROM
+    0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e,        // peers;
+    0x70, 0x65, 0x65, 0x72, 0x73, 0x3b,              // system.peers;
+    0x00, 0x01,                                      // consistency
+    0x00                                             // flags
 };
 
 char TEST_MESSAGE_QUERY_PAGING[] = {
-    0x02, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x2a, // header
-    0x00, 0x00, 0x00, 0x1b,                         // string length (27)
-    0x53, 0x45, 0x4c, 0x45, 0x43, 0x54,             // SELECT
-    0x20, 0x2a, 0x20,                               //  *
-    0x46, 0x52, 0x4f, 0x4d, 0x20,                   // FROM
-    0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e,       // peers;
-    0x70, 0x65, 0x65, 0x72, 0x73, 0x3b,             // system.peers;
-    0x00, 0x01,                                     // consistency
-    0x08,                                           // flags
-    0x00, 0x06,                                     // length 6
-    0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72              // foobar
+    0x02, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x2a,  // header
+    0x00, 0x00, 0x00, 0x1b,                          // string length (27)
+    0x53, 0x45, 0x4c, 0x45, 0x43, 0x54,              // SELECT
+    0x20, 0x2a, 0x20,                                //  *
+    0x46, 0x52, 0x4f, 0x4d, 0x20,                    // FROM
+    0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e,        // peers;
+    0x70, 0x65, 0x65, 0x72, 0x73, 0x3b,              // system.peers;
+    0x00, 0x01,                                      // consistency
+    0x08,                                            // flags
+    0x00, 0x06,                                      // length 6
+    0x66, 0x6f, 0x6f, 0x62, 0x61, 0x72               // foobar
 };
 
 
@@ -79,134 +80,181 @@ char TEST_MESSAGE_QUERY_PAGING[] = {
 
 void
 print_hex(
-   char*  value,
-   size_t size)
-{
-   for (size_t i = 0; i < size; ++i) {
-      printf("%02.2x ", (unsigned)(unsigned char) value[i]);
-   }
+    char*  value,
+    size_t size) {
+    for (size_t i = 0; i < size; ++i) {
+        printf("%02.2x ", (unsigned)(unsigned char) value[i]);
+    }
 }
 
 bool
-test_error_consume()
-{
-   message_t message;
-   CHECK_EQUAL(message.consume(TEST_MESSAGE_ERROR, sizeof(TEST_MESSAGE_ERROR)), sizeof(TEST_MESSAGE_ERROR));
-   CHECK_EQUAL((int) message.version, 0x81);
-   CHECK_EQUAL((int) message.flags, 0x01);
-   CHECK_EQUAL((int) message.stream, 0x7F);
-   CHECK_EQUAL((int) message.opcode, 0x00);
-   CHECK_EQUAL((int) message.length, 0x0C);
-   return true;
+test_error_consume() {
+    Message message;
+    CHECK_EQUAL(
+        message.consume(TEST_MESSAGE_ERROR,
+                        sizeof(TEST_MESSAGE_ERROR)),
+        sizeof(TEST_MESSAGE_ERROR));
+    CHECK_EQUAL(static_cast<int>(message.version), 0x81);
+    CHECK_EQUAL(static_cast<int>(message.flags), 0x01);
+    CHECK_EQUAL(static_cast<int>(message.stream), 0x7F);
+    CHECK_EQUAL(static_cast<int>(message.opcode), 0x00);
+    CHECK_EQUAL(static_cast<int>(message.length), 0x0C);
+    return true;
 }
 
 bool
-test_error_prepare()
-{
-   message_t message;
-   message.version = 0x81;
-   message.flags   = 0x01;
-   message.stream  = 0x7F;
-   message.opcode  = 0x00;
-   message.body.reset(new body_error_t(0xFFFFFFFF, (const char*)"foobar", 6));
+test_error_prepare() {
+    Message message;
+    message.version = 0x81;
+    message.flags   = 0x01;
+    message.stream  = 0x7F;
+    message.opcode  = 0x00;
+    message.body.reset(new BodyError(0xFFFFFFFF, (const char*)"foobar", 6));
 
-   std::unique_ptr<char> buffer;
-   char*                 buffer_ptr;
-   size_t                size;
-   CHECK(message.prepare(&buffer_ptr, size));
-   buffer.reset(buffer_ptr);
+    std::unique_ptr<char> buffer;
+    char*                 buffer_ptr;
+    size_t                size;
+    CHECK(message.prepare(&buffer_ptr, size));
+    buffer.reset(buffer_ptr);
 
-   CHECK_EQUAL(sizeof(TEST_MESSAGE_ERROR), size);
-   CHECK_EQUAL(memcmp(TEST_MESSAGE_ERROR, buffer.get(), sizeof(TEST_MESSAGE_ERROR)), 0);
-   return true;
+    CHECK_EQUAL(sizeof(TEST_MESSAGE_ERROR), size);
+    CHECK_EQUAL(
+        memcmp(TEST_MESSAGE_ERROR,
+               buffer.get(),
+               sizeof(TEST_MESSAGE_ERROR)),
+        0);
+    return true;
 }
 
 bool
-test_options_prepare()
-{
-   message_t             message(CQL_OPCODE_OPTIONS);
-   std::unique_ptr<char> buffer;
-   char*                 buffer_ptr;
-   size_t                size;
+test_options_prepare() {
+    Message               message(CQL_OPCODE_OPTIONS);
+    std::unique_ptr<char> buffer;
+    char*                 buffer_ptr;
+    size_t                size;
 
-   CHECK(message.body);
-   CHECK(message.prepare(&buffer_ptr, size));
-   buffer.reset(buffer_ptr);
+    CHECK(message.body);
+    CHECK(message.prepare(&buffer_ptr, size));
+    buffer.reset(buffer_ptr);
 
-   CHECK_EQUAL(sizeof(TEST_MESSAGE_OPTIONS), size);
-   CHECK_EQUAL(memcmp(TEST_MESSAGE_OPTIONS, buffer.get(), sizeof(TEST_MESSAGE_OPTIONS)), 0);
-   return true;
+    CHECK_EQUAL(sizeof(TEST_MESSAGE_OPTIONS), size);
+    CHECK_EQUAL(
+        memcmp(TEST_MESSAGE_OPTIONS,
+               buffer.get(),
+               sizeof(TEST_MESSAGE_OPTIONS)),
+        0);
+    return true;
 }
 
 bool
-test_startup_prepare()
-{
-   message_t             message(CQL_OPCODE_STARTUP);
-   std::unique_ptr<char> buffer;
-   char*                 buffer_ptr;
-   size_t                size;
+test_startup_prepare() {
+    Message               message(CQL_OPCODE_STARTUP);
+    std::unique_ptr<char> buffer;
+    char*                 buffer_ptr;
+    size_t                size;
 
-   CHECK(message.body);
-   CHECK(message.prepare(&buffer_ptr, size));
-   buffer.reset(buffer_ptr);
+    CHECK(message.body);
+    CHECK(message.prepare(&buffer_ptr, size));
+    buffer.reset(buffer_ptr);
 
-   CHECK_EQUAL(sizeof(TEST_MESSAGE_STARTUP), size);
-   CHECK_EQUAL(memcmp(TEST_MESSAGE_STARTUP, buffer.get(), sizeof(TEST_MESSAGE_STARTUP)), 0);
-   return true;
+    CHECK_EQUAL(sizeof(TEST_MESSAGE_STARTUP), size);
+    CHECK_EQUAL(
+        memcmp(TEST_MESSAGE_STARTUP,
+               buffer.get(),
+               sizeof(TEST_MESSAGE_STARTUP)),
+        0);
+    return true;
 }
 
 bool
-test_query_query()
-{
-   message_t             message(CQL_OPCODE_QUERY);
-   std::unique_ptr<char> buffer;
-   char*                 buffer_ptr;
-   size_t                size;
+test_query_query() {
+    Message               message(CQL_OPCODE_QUERY);
+    std::unique_ptr<char> buffer;
+    char*                 buffer_ptr;
+    size_t                size;
 
-   CHECK(message.body);
-   body_query_t* query = static_cast<body_query_t*>(message.body.get());
-   query->query_string("SELECT * FROM system.peers;");
-   query->consistency(CQL_CONSISTENCY_ONE);
+    CHECK(message.body);
+    BodyQuery* query = static_cast<BodyQuery*>(message.body.get());
+    query->query_string("SELECT * FROM system.peers;");
+    query->consistency(CQL_CONSISTENCY_ONE);
 
-   CHECK(message.prepare(&buffer_ptr, size));
-   buffer.reset(buffer_ptr);
-   CHECK_EQUAL(sizeof(TEST_MESSAGE_QUERY), size);
-   CHECK_EQUAL(memcmp(TEST_MESSAGE_QUERY, buffer.get(), sizeof(TEST_MESSAGE_QUERY)), 0);
-   return true;
+    CHECK(message.prepare(&buffer_ptr, size));
+    buffer.reset(buffer_ptr);
+    CHECK_EQUAL(sizeof(TEST_MESSAGE_QUERY), size);
+    CHECK_EQUAL(
+        memcmp(TEST_MESSAGE_QUERY,
+               buffer.get(),
+               sizeof(TEST_MESSAGE_QUERY)),
+        0);
+    return true;
 }
 
 bool
-test_query_query_paging()
-{
-   message_t             message(CQL_OPCODE_QUERY);
-   std::unique_ptr<char> buffer;
-   char*                 buffer_ptr;
-   size_t                size;
-   const char*           paging_state = "foobar";
+test_query_query_paging() {
+    Message               message(CQL_OPCODE_QUERY);
+    std::unique_ptr<char> buffer;
+    char*                 buffer_ptr;
+    size_t                size;
+    const char*           paging_state = "foobar";
 
-   CHECK(message.body);
-   body_query_t* query = static_cast<body_query_t*>(message.body.get());
-   query->query_string("SELECT * FROM system.peers;");
-   query->consistency(CQL_CONSISTENCY_ONE);
-   query->paging_state(paging_state, strlen(paging_state));
+    CHECK(message.body);
+    BodyQuery* query = static_cast<BodyQuery*>(message.body.get());
+    query->query_string("SELECT * FROM system.peers;");
+    query->consistency(CQL_CONSISTENCY_ONE);
+    query->paging_state(paging_state, strlen(paging_state));
 
-   CHECK(message.prepare(&buffer_ptr, size));
-   buffer.reset(buffer_ptr);
+    CHECK(message.prepare(&buffer_ptr, size));
+    buffer.reset(buffer_ptr);
 
-   print_hex(buffer_ptr, size);
-   std::cout << std::endl;
+    print_hex(buffer_ptr, size);
+    std::cout << std::endl;
 
-   print_hex(TEST_MESSAGE_QUERY_PAGING, sizeof(TEST_MESSAGE_QUERY_PAGING));
-   std::cout << std::endl;
+    print_hex(TEST_MESSAGE_QUERY_PAGING, sizeof(TEST_MESSAGE_QUERY_PAGING));
+    std::cout << std::endl;
 
-   CHECK_EQUAL(sizeof(TEST_MESSAGE_QUERY_PAGING), size);
-   CHECK_EQUAL(memcmp(TEST_MESSAGE_QUERY_PAGING, buffer.get(), sizeof(TEST_MESSAGE_QUERY_PAGING)), 0);
-   return true;
+    CHECK_EQUAL(sizeof(TEST_MESSAGE_QUERY_PAGING), size);
+    CHECK_EQUAL(
+        memcmp(TEST_MESSAGE_QUERY_PAGING,
+               buffer.get(),
+               sizeof(TEST_MESSAGE_QUERY_PAGING)),
+        0);
+    return true;
 }
 
 bool
-ssl_test()
-{
+test_query_query_page_size() {
+    Message               message(CQL_OPCODE_QUERY);
+    std::unique_ptr<char> buffer;
+    char*                 buffer_ptr;
+    size_t                size;
+    const char*           paging_state = "foobar";
+
+    CHECK(message.body);
+    BodyQuery* query = static_cast<BodyQuery*>(message.body.get());
+    query->query_string("SELECT * FROM system.peers;");
+    query->consistency(CQL_CONSISTENCY_ONE);
+    query->paging_state(paging_state, strlen(paging_state));
+
+    CHECK(message.prepare(&buffer_ptr, size));
+    buffer.reset(buffer_ptr);
+
+    print_hex(buffer_ptr, size);
+    std::cout << std::endl;
+
+    print_hex(TEST_MESSAGE_QUERY_PAGING, sizeof(TEST_MESSAGE_QUERY_PAGING));
+    std::cout << std::endl;
+
+    CHECK_EQUAL(sizeof(TEST_MESSAGE_QUERY_PAGING), size);
+    CHECK_EQUAL(
+        memcmp(TEST_MESSAGE_QUERY_PAGING,
+               buffer.get(),
+               sizeof(TEST_MESSAGE_QUERY_PAGING)),
+        0);
+    return true;
+}
+
+bool
+ssl_test() {
     // ssl_context_t ssl_client_context;
     // ssl_client_context.init(true, true);
 
@@ -324,11 +372,11 @@ ssl_test()
 
 int
 main() {
-   TEST(test_error_consume());
-   TEST(test_error_prepare());
-   TEST(test_options_prepare());
-   TEST(test_startup_prepare());
-   TEST(test_query_query());
-   TEST(test_query_query_paging());
-   return 0;
+    TEST(test_error_consume());
+    TEST(test_error_prepare());
+    TEST(test_options_prepare());
+    TEST(test_startup_prepare());
+    TEST(test_query_query());
+    TEST(test_query_query_paging());
+    return 0;
 }

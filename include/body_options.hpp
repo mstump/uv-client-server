@@ -28,43 +28,39 @@
 
 #include "body.hpp"
 
-struct body_options_t
-    : public body_t
-{
+struct BodyOptions
+    : public Body {
 
-    body_options_t()
-    {}
+  BodyOptions()
+  {}
 
-    uint8_t
-    opcode()
-    {
-        return CQL_OPCODE_OPTIONS;
-    }
+  uint8_t
+  opcode() {
+    return CQL_OPCODE_OPTIONS;
+  }
 
-    bool
-    consume(
-        char*  buffer,
-        size_t size)
-    {
-        (void) buffer;
-        (void) size;
-        return true;
-    }
+  bool
+  consume(
+      char*  buffer,
+      size_t size) {
+    (void) buffer;
+    (void) size;
+    return true;
+  }
 
-    bool
-    prepare(
-        size_t  reserved,
-        char**  output,
-        size_t& size)
-    {
-        *output = new char[size];
-        size = reserved;
-        return true;
-    }
+  bool
+  prepare(
+      size_t  reserved,
+      char**  output,
+      size_t& size) {
+    *output = new char[size];
+    size = reserved;
+    return true;
+  }
 
-private:
-    body_options_t(const body_options_t&) {}
-    void operator=(const body_options_t&) {}
+ private:
+  BodyOptions(const BodyOptions&) {}
+  void operator=(const BodyOptions&) {}
 };
 
 #endif

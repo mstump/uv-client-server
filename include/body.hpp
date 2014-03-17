@@ -26,8 +26,8 @@
 #ifndef __BODY_HPP_INCLUDED__
 #define __BODY_HPP_INCLUDED__
 
-struct body_t {
-
+struct
+Body {
     virtual uint8_t
     opcode() = 0;
 
@@ -43,9 +43,8 @@ struct body_t {
         size_t& size) = 0;
 
     virtual
-    ~body_t()
+    ~Body()
     {}
-
 };
 
 #endif

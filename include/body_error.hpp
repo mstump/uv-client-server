@@ -29,66 +29,63 @@
 #include "body.hpp"
 #include "serialization.hpp"
 
-struct body_error_t
-    : public body_t
-{
-    std::unique_ptr<char> guard;
-    int32_t               code;
-    char*                 message;
-    size_t                message_size;
+struct
+BodyError
+    : public Body {
 
-    body_error_t() :
-        code(0xFFFFFFFF),
-        message(NULL),
-        message_size(0)
-    {}
+  std::unique_ptr<char> guard;
+  int32_t               code;
+  char*                 message;
+  size_t                message_size;
 
-    body_error_t(
-        int32_t     code,
-        const char* input,
-        size_t      input_size) :
-        guard((char*) malloc(input_size)),
-        code(code),
-        message(guard.get()),
-        message_size(input_size)
-    {
-        memcpy(message, input, input_size);
-    }
+  BodyError() :
+      code(0xFFFFFFFF),
+      message(NULL),
+      message_size(0)
+  {}
 
-    uint8_t
-    opcode()
-    {
-        return CQL_OPCODE_ERROR;
-    }
+  BodyError(
+      int32_t     code,
+      const char* input,
+      size_t      input_size) :
+      guard(new char[input_size]),
+      code(code),
+      message(guard.get()),
+      message_size(input_size) {
+    memcpy(message, input, input_size);
+  }
 
-    bool
-    consume(
-        char*  buffer,
-        size_t size)
-    {
-        (void) size;
-        buffer = decode_int(buffer, code);
-        decode_string(buffer, &message, message_size);
-        return true;
-    }
+  uint8_t
+  opcode() {
+    return CQL_OPCODE_ERROR;
+  }
 
-    bool
-    prepare(
-        size_t  reserved,
-        char**  output,
-        size_t& size)
-    {
-        size = reserved + sizeof(int32_t) + sizeof(int16_t) + message_size;
-        *output = new char[size];
+  bool
+  consume(
+      char*  buffer,
+      size_t size) {
+    (void) size;
+    buffer = decode_int(buffer, code);
+    decode_string(buffer, &message, message_size);
+    return true;
+  }
 
-        char* buffer = *output + reserved;
-        buffer       = encode_int(buffer, code);
-        encode_string(buffer, message, message_size);
-        return true;
-    }
+  bool
+  prepare(
+      size_t  reserved,
+      char**  output,
+      size_t& size) {
+    size = reserved + sizeof(int32_t) + sizeof(int16_t) + message_size;
+    *output = new char[size];
 
-private:
-    body_error_t(const body_error_t&) {}
-    void operator=(const body_error_t&) {}
+    char* buffer = *output + reserved;
+    buffer       = encode_int(buffer, code);
+    encode_string(buffer, message, message_size);
+    return true;
+  }
+
+ private:
+  BodyError(const BodyError&) {}
+  void operator=(const BodyError&) {}
 };
 #endif

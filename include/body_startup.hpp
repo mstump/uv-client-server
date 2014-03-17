@@ -26,77 +26,79 @@
 #ifndef __BODY_STARTUP_HPP_INCLUDED__
 #define __BODY_STARTUP_HPP_INCLUDED__
 
+#include <map>
+#include <string>
+
 #include "body.hpp"
 
-struct body_startup_t
-    : public body_t
-{
-    std::unique_ptr<char> guard;
-    std::string           cql_version;
-    std::string           compression;
+struct BodyStartup
+    : public Body {
+  std::unique_ptr<char> guard;
+  std::string           cql_version;
+  std::string           compression;
 
-    body_startup_t() :
-        cql_version("3.0.0"),
-        compression("")
-    {}
+  BodyStartup() :
+      cql_version("3.0.0"),
+      compression("")
+  {}
 
-    uint8_t
-    opcode()
-    {
-        return CQL_OPCODE_STARTUP;
+  uint8_t
+  opcode() {
+    return CQL_OPCODE_STARTUP;
+  }
+
+  bool
+  consume(
+      char*  buffer,
+      size_t size) {
+    (void) size;
+
+    OptionsCollection options;
+    decode_string_map(buffer, options);
+    OptionsCollection::const_iterator it = options.find("COMPRESSION");
+    if (it != options.end()) {
+      compression = it->second;
     }
 
-    bool
-    consume(
-        char*  buffer,
-        size_t size)
-    {
-        (void) size;
-        std::map<std::string, std::string> options;
-        decode_string_map(buffer, options);
-        std::map<std::string, std::string>::const_iterator it = options.find("COMPRESSION");
-        if (it != options.end()) {
-            compression = it->second;
-        }
+    it = options.find("CQL_VERSION");
+    if (it != options.end()) {
+      cql_version = it->second;
+    }
+    return true;
+  }
 
-        it = options.find("CQL_VERSION");
-        if (it != options.end()) {
-            cql_version = it->second;
-        }
-        return true;
+  bool
+  prepare(
+      size_t  reserved,
+      char**  output,
+      size_t& size) {
+    size = reserved + sizeof(int16_t);
+
+    std::map<std::string, std::string> options;
+    if (!compression.empty()) {
+      const char* key = "COMPRESSION";
+      size += (sizeof(int16_t) + strlen(key));
+      size += (sizeof(int16_t) + compression.size());
+      options[key] = compression;
     }
 
-    bool
-    prepare(
-        size_t  reserved,
-        char**  output,
-        size_t& size)
-    {
-        size = reserved + sizeof(int16_t);
-
-        std::map<std::string, std::string> options;
-        if (!compression.empty()) {
-            const char* key = "COMPRESSION";
-            size += (sizeof(int16_t) + strlen(key));
-            size += (sizeof(int16_t) + compression.size());
-            options[key] = compression;
-        }
-
-        if (!cql_version.empty()) {
-            const char* key = "CQL_VERSION";
-            size += (sizeof(int16_t) + strlen(key));
-            size += (sizeof(int16_t) + cql_version.size());
-            options[key] = cql_version;
-        }
-
-        *output = new char[size];
-        encode_string_map(*output + reserved, options);
-        return true;
+    if (!cql_version.empty()) {
+      const char* key = "CQL_VERSION";
+      size += (sizeof(int16_t) + strlen(key));
+      size += (sizeof(int16_t) + cql_version.size());
+      options[key] = cql_version;
     }
 
-private:
-    body_startup_t(const body_startup_t&) {}
-    void operator=(const body_startup_t&) {}
+    *output = new char[size];
+    encode_string_map(*output + reserved, options);
+    return true;
+  }
+
+ private:
+  typedef std::map<std::string, std::string> OptionsCollection;
+
+  BodyStartup(const BodyStartup&) {}
+  void operator=(const BodyStartup&) {}
 };
 
 #endif

@@ -23,48 +23,44 @@
 
 // For more information, please refer to <http://unlicense.org/>
 
-#ifndef __READY_HPP_INCLUDED__
-#define __READY_HPP_INCLUDED__
+#ifndef __BODY_READY_HPP_INCLUDED__
+#define __BODY_READY_HPP_INCLUDED__
 
 #include "body.hpp"
 
-struct body_ready_t
-    : public body_t
-{
+struct BodyReady
+    : public Body {
 
-    body_ready_t()
-    {}
+  BodyReady()
+  {}
 
-    uint8_t
-    opcode()
-    {
-        return CQL_OPCODE_READY;
-    }
+  uint8_t
+  opcode() {
+    return CQL_OPCODE_READY;
+  }
 
-    bool
-    consume(
-        char*  buffer,
-        size_t size)
-    {
-        (void) buffer;
-        (void) size;
-        return true;
-    }
+  bool
+  consume(
+      char*  buffer,
+      size_t size) {
+    (void) buffer;
+    (void) size;
+    return true;
+  }
 
-    bool
-    prepare(
-        size_t  reserved,
-        char**  output,
-        size_t& size)
-    {
-        *output = new char[size];
-        size = reserved;
-        return true;
-    }
+  bool
+  prepare(
+      size_t  reserved,
+      char**  output,
+      size_t& size) {
+    *output = new char[size];
+    size = reserved;
+    return true;
+  }
 
-private:
-    body_ready_t(const body_ready_t&) {}
-    void operator=(const body_ready_t&) {}
+ private:
+  BodyReady(const BodyReady&) {}
+  void operator=(const BodyReady&) {}
 };
 
 #endif
