@@ -88,7 +88,7 @@ encode_string(
     size_t      size) {
   char* buffer = encode_short(output, size);
   memcpy(buffer, input, size);
-  return output + size;
+  return buffer + size;
 }
 
 inline char*
@@ -98,7 +98,7 @@ encode_long_string(
     size_t      size) {
   char* buffer = encode_int(output, size);
   memcpy(buffer, input, size);
-  return output + size;
+  return buffer + size;
 }
 
 inline char*
