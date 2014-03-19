@@ -41,8 +41,6 @@
 #include "ssl_session.hpp"
 #include "ssl_context.hpp"
 
-
-
 #define MESSAGE_SLOTS 128
 
 struct Context {
@@ -92,7 +90,6 @@ struct ClientConnection {
     CLIENT_STATE_SUPPORTED,
     CLIENT_STATE_READY,
     CLIENT_STATE_KS_SET,
-    CLIENT_STATE_PREPARING,
     CLIENT_STATE_ACCEPT_REQUESTS,
     CLIENT_STATE_DISCONNECTING,
     CLIENT_STATE_DISCONNECTED
@@ -187,9 +184,7 @@ struct ClientConnection {
         set_keyspace();
         break;
       case CLIENT_STATE_KS_SET:
-        prepare_statements();
-        break;
-      case CLIENT_STATE_ACCEPT_REQUESTS:
+        notify_ready();
         break;
       default:
         assert(false);
@@ -265,6 +260,32 @@ struct ClientConnection {
     connection->event_received();
   }
 
+  static void
+  on_read(
+      uv_stream_t* client,
+      ssize_t      nread,
+      uv_buf_t     buf) {
+    ClientConnection* connection =
+        reinterpret_cast<ClientConnection*>(client->data);
+
+    Context* context = connection->context;
+
+    context->log(CQL_LOG_DEBUG, "on_read");
+    if (nread == -1) {
+      if (uv_last_error(context->loop).code != UV_EOF) {
+        fprintf(stderr,
+                "Read error %s\n",
+                uv_err_name(uv_last_error(context->loop)));
+      }
+      connection->close();
+      return;
+    }
+
+    // TODO(mstump) SSL
+    connection->consume(buf.base, nread);
+    free_buffer(buf);
+  }
+
   void
   close() {
     context->log(CQL_LOG_DEBUG, "close");
@@ -276,8 +297,8 @@ struct ClientConnection {
 
   static void
   on_connect(
-      uv_connect_t *request,
-      int           status) {
+      uv_connect_t*     request,
+      int               status) {
     ClientConnection* connection
         = reinterpret_cast<ClientConnection*>(request->data);
 
@@ -292,6 +313,14 @@ struct ClientConnection {
           uv_err_name(uv_last_error(connection->context->loop)));
       return;
     }
+
+    uv_read_start(
+        reinterpret_cast<uv_stream_t*>(&connection->socket),
+        alloc_buffer,
+        on_read);
+
+    connection->state = CLIENT_STATE_CONNECTED;
+    connection->event_received();
   }
 
   void
@@ -322,6 +351,7 @@ struct ClientConnection {
       Message* response) {
     context->log(CQL_LOG_DEBUG, "on_error_stream_zero");
     BodyError* error = static_cast<BodyError*>(response->body.get());
+
     // TODO(mstump) do something with the supported info
     context->log(CQL_LOG_ERROR, error->message);
 
@@ -360,23 +390,25 @@ struct ClientConnection {
   }
 
   void
-  prepare_statements() {
-
-  }
-
-  void
   set_keyspace() {
-    if (!keyspace.empty()) {
+    context->log(CQL_LOG_DEBUG, "set_keyspace");
 
+    if (!keyspace.empty()) {
+      Message    message(CQL_OPCODE_QUERY);
+      BodyQuery* query = static_cast<BodyQuery*>(message.body.get());
+      query->query_string("use ?;");
+      query->add_value(keyspace.c_str(), keyspace.size());
+      send_message(&message);
     } else {
       state = CLIENT_STATE_KS_SET;
       event_received();
     }
-    context->log(CQL_LOG_DEBUG, "set_keyspace");
-    Message    message(CQL_OPCODE_QUERY);
-    BodyQuery* query = static_cast<BodyQuery*>(message.body.get());
-    query->query_string("select * from system.peers;");
-    send_message(&message);
+  }
+
+  void
+  notify_ready() {
+    context->log(CQL_LOG_DEBUG, "notify_ready");
+    // TODO(mstump)
   }
 
   void
@@ -394,21 +426,6 @@ struct ClientConnection {
     startup->cql_version = cql_version;
     send_message(&message);
   }
-
-  int
-  send_message(
-      Message*         message,
-      message_callback_t callback) {
-    if (available_streams_index == 0) {
-      return CQL_ERROR_NO_STREAMS;
-    }
-
-    int8_t stream_id   = available_streams[available_streams_index--];
-    callers[stream_id] = callback;
-    message->stream    = stream_id;
-    return send_message(message);
-  }
-
 
   static void
   on_write(
@@ -430,6 +447,20 @@ struct ClientConnection {
     delete data->buf.base;
     delete data;
     delete req;
+  }
+
+  int
+  send_message(
+      Message*           message,
+      message_callback_t callback) {
+    if (available_streams_index == 0) {
+      return CQL_ERROR_NO_STREAMS;
+    }
+
+    int8_t stream_id   = available_streams[available_streams_index--];
+    callers[stream_id] = callback;
+    message->stream    = stream_id;
+    return send_message(message);
   }
 
   int

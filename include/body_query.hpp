@@ -41,8 +41,8 @@
 class BodyQuery
     : public Body {
  private:
-  typedef std::pair<char*, size_t> value_t;
-  typedef std::list<value_t>       value_collection_t;
+  typedef std::pair<const char*, size_t> value_t;
+  typedef std::list<value_t>             value_collection_t;
 
   std::string        _query;
   int16_t            _consistency;
@@ -97,8 +97,8 @@ class BodyQuery
 
   void
   add_value(
-      char*  value,
-      size_t size) {
+      const char* value,
+      size_t      size) {
     _values.push_back(std::make_pair(value, size));
   }
 

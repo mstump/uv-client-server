@@ -39,22 +39,47 @@
 
 #include <deque>
 
-#define BUFFER_SIZE 4096
+#define BUFFER_SIZE 66560
 
 class SSLSession {
   SSL* ssl;
-  BIO* read_bio;
-  BIO* write_bio;
+
+  BIO* ssl_bio;
+  BIO* network_bio;
+  BIO* internal_bio;
 
  public:
   SSLSession(
       SSL_CTX* ctx) :
-      ssl(SSL_new(ctx)),
-      read_bio(BIO_new(BIO_s_mem())),
-      write_bio(BIO_new(BIO_s_mem()))
+      ssl(SSL_new(ctx))
   {}
 
-  ~SSLSession() {
+  bool
+  init() {
+    if (!ssl) {
+      return false;
+    }
+
+    if (!BIO_new_bio_pair(
+            &internal_bio,
+            BUFFER_SIZE,
+            &network_bio,
+            BUFFER_SIZE)) {
+      return false;
+    }
+
+    ssl_bio = BIO_new(BIO_f_ssl());
+    if (!ssl_bio) {
+      return false;
+    }
+
+    SSL_set_bio(ssl, internal_bio, internal_bio);
+    BIO_set_ssl(ssl_bio, ssl, BIO_NOCLOSE);
+    return true;
+  }
+
+  void
+  shutdown() {
     SSL_shutdown(ssl);
     SSL_free(ssl);
   }
@@ -67,7 +92,7 @@ class SSLSession {
     } else {
       SSL_set_accept_state(ssl);
     }
-    SSL_set_bio(ssl, read_bio, write_bio);
+    SSL_do_handshake(ssl);
   }
 
   bool
@@ -85,62 +110,56 @@ class SSLSession {
 
   int
   read_write(
-      const std::deque<uv_buf_t>& read_input,
-      std::deque<uv_buf_t>&       read_output,
-      const std::deque<uv_buf_t>& write_input,
-      std::deque<uv_buf_t>&       write_output) {
-    for (std::deque<uv_buf_t>::const_iterator it = read_input.begin();
-         it != read_input.end();
-         ++it) {
-      int written = BIO_write(read_bio, it->base, it->len);
-      if (!check_error(written)) {
-        return CQL_ERROR_SSL_READ;
-      }
-    }
-
-    for (std::deque<uv_buf_t>::const_iterator it = write_input.begin();
-         it != write_input.end();
-         ++it) {
-      int written = SSL_write(ssl, it->base, it->len);
-      if (!check_error(written)) {
+      uv_buf_t  read_input,
+      uv_buf_t& read_output,
+      size_t&   read_size,
+      uv_buf_t  write_input,
+      uv_buf_t& write_output) {
+    if (write_input.len) {
+      int write_status = BIO_write(ssl_bio, write_input.base, write_input.len);
+      if (!check_error(write_status)) {
+        ERR_print_errors_fp(stdout);
         return CQL_ERROR_SSL_WRITE;
       }
     }
 
-    for (;;) {
-      uv_buf_t buf = alloc_buffer(BUFFER_SIZE);
-      int read = SSL_read(ssl, buf.base, buf.len);
+    int pending = BIO_ctrl_pending(ssl_bio);
+    if (pending) {
+      read_output.base = new char[pending];
+      int read         = BIO_read(ssl_bio, read_output.base, pending);
 
       if (!check_error(read)) {
-        free_buffer(buf);
         return CQL_ERROR_SSL_READ;
       }
+      read_output.len = read;
+    }
 
-      if (read > 0) {
-        buf.len = read;
-        read_output.push_back(buf);
+    if (read_input.len > 0) {
+      if ((read_size = BIO_get_write_guarantee(network_bio))) {
+        if (read_size > read_input.len) {
+          read_size = read_input.len;
+        }
+
+        if (!check_error(BIO_write(network_bio, read_input.base, read_size))) {
+          return CQL_ERROR_SSL_READ;
+        }
       }
-      free_buffer(buf);
+    } else {
+      read_size = 0;
+    }
 
-      if (read != BUFFER_SIZE || read == 0) {
-        break;
+    write_output.len = BIO_ctrl_pending(network_bio);
+    if (write_output.len) {
+      write_output.base = new char[write_output.len];
+      if (!check_error(
+              BIO_read(
+                  network_bio,
+                  write_output.base,
+                  write_output.len))) {
+        return CQL_ERROR_SSL_WRITE;
       }
     }
 
-    for (;;) {
-      uv_buf_t buf = alloc_buffer(BUFFER_SIZE);
-      int read = BIO_read(write_bio, buf.base, buf.len);
-
-      if (read > 0) {
-        buf.len = read;
-        write_output.push_back(buf);
-      }
-      free_buffer(buf);
-
-      if (read != BUFFER_SIZE || read == 0) {
-        break;
-      }
-    }
     return CQL_ERROR_NO_ERROR;
   }
 
@@ -148,6 +167,7 @@ class SSLSession {
   check_error(
       int input) {
     int err = SSL_get_error(ssl, input);
+
     if (err == SSL_ERROR_NONE || err == SSL_ERROR_WANT_READ) {
       return true;
     }

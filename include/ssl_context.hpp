@@ -37,10 +37,9 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
-#include <deque>
+#include "ssl_session.hpp"
 
 class SSLContext {
-
  public:
   typedef int (*pem_callback_t)(char *, int, int, void *);
   typedef int (*verify_callback_t)(int, X509_STORE_CTX*);
@@ -63,12 +62,12 @@ class SSLContext {
 
     SSL_load_error_strings();
     ERR_load_BIO_strings();
-    OpenSSL_add_all_algorithms();
     SSL_library_init();
+    OpenSSL_add_all_algorithms();
     if (client) {
-      _ssl_ctx = SSL_CTX_new(TLSv1_method());
+      _ssl_ctx = SSL_CTX_new(TLSv1_client_method());
     } else {
-      _ssl_ctx = SSL_CTX_new(TLSv1_method());
+      _ssl_ctx = SSL_CTX_new(TLSv1_server_method());
     }
 
     SSL_CTX_set_cipher_list(
@@ -106,8 +105,7 @@ class SSLContext {
   int
   add_crl(
       const char* input,
-      size_t      size)
-  {
+      size_t      size) {
     BIO* bio = load_bio(input, size);
     if (!bio) {
       return CQL_ERROR_SSL_CRL;

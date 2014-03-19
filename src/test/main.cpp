@@ -28,6 +28,8 @@
 
 #include "common.hpp"
 #include "message.hpp"
+#include "ssl_context.hpp"
+#include "ssl_session.hpp"
 
 char TEST_MESSAGE_ERROR[] = {
     0x81, 0x01, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x0C,  // header
@@ -206,12 +208,6 @@ test_query_query_paging() {
     CHECK(message.prepare(&buffer_ptr, size));
     buffer.reset(buffer_ptr);
 
-    print_hex(buffer_ptr, size);
-    std::cout << std::endl;
-
-    print_hex(TEST_MESSAGE_QUERY_PAGING, sizeof(TEST_MESSAGE_QUERY_PAGING));
-    std::cout << std::endl;
-
     CHECK_EQUAL(sizeof(TEST_MESSAGE_QUERY_PAGING), size);
     CHECK_EQUAL(
         memcmp(TEST_MESSAGE_QUERY_PAGING,
@@ -221,152 +217,169 @@ test_query_query_paging() {
     return true;
 }
 
-bool
-test_query_query_page_size() {
-    Message               message(CQL_OPCODE_QUERY);
-    std::unique_ptr<char> buffer;
-    char*                 buffer_ptr;
-    size_t                size;
-    const char*           paging_state = "foobar";
-
-    CHECK(message.body);
-    BodyQuery* query = static_cast<BodyQuery*>(message.body.get());
-    query->query_string("SELECT * FROM system.peers;");
-    query->consistency(CQL_CONSISTENCY_ONE);
-    query->paging_state(paging_state, strlen(paging_state));
-
-    CHECK(message.prepare(&buffer_ptr, size));
-    buffer.reset(buffer_ptr);
-
-    print_hex(buffer_ptr, size);
-    std::cout << std::endl;
-
-    print_hex(TEST_MESSAGE_QUERY_PAGING, sizeof(TEST_MESSAGE_QUERY_PAGING));
-    std::cout << std::endl;
-
-    CHECK_EQUAL(sizeof(TEST_MESSAGE_QUERY_PAGING), size);
-    CHECK_EQUAL(
-        memcmp(TEST_MESSAGE_QUERY_PAGING,
-               buffer.get(),
-               sizeof(TEST_MESSAGE_QUERY_PAGING)),
-        0);
-    return true;
-}
 
 bool
-ssl_test() {
-    // ssl_context_t ssl_client_context;
-    // ssl_client_context.init(true, true);
+test_ssl() {
+    SSLContext ssl_client_context;
+    ssl_client_context.init(true, true);
 
-    // ssl_context_t ssl_server_context;
-    // ssl_server_context.init(true, false);
+    SSLContext ssl_server_context;
+    ssl_server_context.init(true, false);
 
-    // RSA* rsa = ssl_context_t::create_key(2048);
-    // if (!rsa) {
-    //     std::cerr << "create_key" << std::endl;
-    //     return 1;
-    // }
+    RSA* rsa = SSLContext::create_key(2048);
+    if (!rsa) {
+        std::cerr << "create_key" << std::endl;
+        return 1;
+    }
 
-    // const char* pszCommonName = "test name";
-    // X509* cert = ssl_context_t::create_cert(rsa, rsa, pszCommonName, pszCommonName, "DICE", 3 * 365 * 24 * 60 * 60);
-    // if (!cert) {
-    //     std::cerr << "Couldn't create a certificate" << std::endl;
-    //     return 1;
-    // }
-    // ssl_server_context.use_key(rsa);
-    // ssl_server_context.use_cert(cert);
+    const char* pszCommonName = "test name";
+    X509* cert = SSLContext::create_cert(
+        rsa, rsa, pszCommonName, pszCommonName, "DICE", 3 * 365 * 24 * 60 * 60);
+    CHECK(cert);
+    ssl_server_context.use_key(rsa);
+    ssl_server_context.use_cert(cert);
 
-    // std::auto_ptr<ssl_session_t> client_session(ssl_client_context.session_new());
-    // std::auto_ptr<ssl_session_t> server_session(ssl_server_context.session_new());
+    std::unique_ptr<SSLSession> client_session(
+        ssl_client_context.session_new());
 
-    // client_session->handshake(true);
-    // server_session->handshake(false);
+    std::unique_ptr<SSLSession> server_session(
+        ssl_server_context.session_new());
 
-    // std::deque<uv_buf_t> client_write_input;
-    // std::deque<uv_buf_t> client_write_output;
-    // std::deque<uv_buf_t> client_read_output;
+    CHECK(client_session->init());
+    CHECK(server_session->init());
+    client_session->handshake(true);
+    server_session->handshake(false);
 
-    // std::deque<uv_buf_t> server_write_input;
-    // std::deque<uv_buf_t> server_write_output;
-    // std::deque<uv_buf_t> server_read_output;
+    uv_buf_t client_write_input  = uv_buf_init(NULL, 0);
+    uv_buf_t client_write_output = uv_buf_init(NULL, 0);
+    uv_buf_t client_read_output  = uv_buf_init(NULL, 0);
 
+    uv_buf_t server_write_input  = uv_buf_init(NULL, 0);
+    uv_buf_t server_write_output = uv_buf_init(NULL, 0);
+    uv_buf_t server_read_output  = uv_buf_init(NULL, 0);
 
-    // for (;;) {
+    bool ssl_established = false;
+    bool client_string_received = false;
+    bool server_string_received = false;
 
-    //     std::cout << "client_session->read_write " << client_session->read_write(server_write_output, client_read_output, client_write_input, client_write_output) << std::endl;
-    //     for (std::deque<uv_buf_t>::const_iterator it = client_read_output.begin();
-    //          it != client_read_output.end();
-    //          ++it)
-    //     {
-    //         std::cout << __FILE__ << ":" << __LINE__ << " buf.len " << it->len << std::endl;
-    //     }
-    //     clear_buffer_deque(server_write_output);
-    //     clear_buffer_deque(client_read_output);
+    const char* client_string = "hello";
+    const char* server_string = "ehllo";
 
-    //     std::cout << "server_session->read_write " << server_session->read_write(client_write_output, server_read_output, server_write_input, server_write_output) << std::endl;
-    //     for (std::deque<uv_buf_t>::const_iterator it = server_read_output.begin();
-    //          it != server_read_output.end();
-    //          ++it)
-    //     {
-    //         std::cout << __FILE__ << ":" << __LINE__ << " buf.len " << it->len << std::endl;
-    //     }
-    //     clear_buffer_deque(client_write_output);
-    //     clear_buffer_deque(server_read_output);
+    for (;;) {
+        size_t client_read = 0;
+        int client_read_write = client_session->read_write(
+            server_write_output,
+            client_read_output,
+            client_read,
+            client_write_input,
+            client_write_output);
 
-    //     if (server_session->handshake_done() && client_session->handshake_done()) {
-    //         char ciphers[1024];
-    //         std::cout << client_session->ciphers(ciphers, sizeof(ciphers)) << std::endl;
-    //         std::cout << server_session->ciphers(ciphers, sizeof(ciphers)) << std::endl;
-    //         break;
-    //     }
-    // }
+        // std::cout << "client_session->read_write: " << client_read_write;
+        // std::cout << ", client_read: " << client_read;
+        // std::cout << ", client_read_output.len: " << client_read_output.len;
+        // std::cout << ", client_write_input.len: " << client_write_input.len;
+        // std::cout << ", client_write_output.len: " << client_write_output.len;
+        // std::cout << std::endl;
 
-    // const char* client_input_data   = "foobar                  ";
-    // uv_buf_t    client_input_buffer = uv_buf_init((char*)client_input_data, strlen(client_input_data));
-    // client_write_input.push_back(client_input_buffer);
+        if (server_write_output.len) {
+            server_write_output.len = 0;
+            delete server_write_output.base;
+        }
+        if (client_read_output.len) {
+            if (ssl_established) {
+                CHECK_EQUAL(0, memcmp(client_read_output.base, server_string, strlen(server_string)));
+                CHECK_EQUAL(strlen(server_string), client_read_output.len);
+                server_string_received = true;
+            }
+            client_read_output.len = 0;
+            delete client_read_output.base;
+        }
+        if (client_write_input.len) {
+            client_write_input.len = 0;
+            delete client_write_input.base;
+        }
 
-    // const char* server_input_data   = "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 14\r\nConnection: close\r\n\r\nthis is a test";
-    // uv_buf_t    server_input_buffer = uv_buf_init((char*)server_input_data, strlen(server_input_data));
-    // server_write_input.push_back(server_input_buffer);
+        if (client_read_write) {
+            break;
+        }
 
+        size_t server_read = 0;
+        int server_read_write = server_session->read_write(
+            client_write_output,
+            server_read_output,
+            server_read,
+            server_write_input,
+            server_write_output);
 
-    // for (;;) {
-    //     std::cout << "client_session->read_write " << client_session->read_write(server_write_output, client_read_output, client_write_input, client_write_output) << std::endl;
-    //     client_write_input.clear();
-    //     for (std::deque<uv_buf_t>::const_iterator it = client_read_output.begin();
-    //          it != client_read_output.end();
-    //          ++it)
-    //     {
-    //         std::cout << __FILE__ << ":" << __LINE__ << " buf.len " << it->len << " buf.base " << std::string(it->base, it->len) << std::endl;
-    //     }
-    //     clear_buffer_deque(server_write_output);
-    //     clear_buffer_deque(client_read_output);
+        // std::cout << "server_session->read_write: " << server_read_write;
+        // std::cout << ", server_read: " << server_read;
+        // std::cout << ", server_read_output.len: " << server_read_output.len;
+        // std::cout << ", server_write_input.len: " << server_write_input.len;
+        // std::cout << ", server_write_output.len: " << server_write_output.len;
+        // std::cout << std::endl;
 
-    //     std::cout << "server_session->read_write " << server_session->read_write(client_write_output, server_read_output, server_write_input, server_write_output) << std::endl;
-    //     server_write_input.clear();
-    //     for (std::deque<uv_buf_t>::const_iterator it = server_read_output.begin();
-    //          it != server_read_output.end();
-    //          ++it)
-    //     {
-    //         std::cout << __FILE__ << ":" << __LINE__ << " buf.len " << it->len << " buf.base " << std::string(it->base, it->len) << std::endl;
-    //     }
-    //     clear_buffer_deque(client_write_output);
-    //     clear_buffer_deque(server_read_output);
+        if (client_write_output.len) {
+            client_write_output.len = 0;
+            delete client_write_output.base;
+        }
+        if (server_read_output.len) {
+            if (ssl_established) {
+                // print_hex(server_read_output.base, server_read_output.len);
+                // std::cout << std::endl;
+                // printf("%.*s\n", static_cast<int>(server_read_output.len), server_read_output.base);
+                CHECK_EQUAL(0, memcmp(server_read_output.base, client_string, strlen(client_string)));
+                CHECK_EQUAL(strlen(client_string), server_read_output.len);
+                client_string_received = true;
+            }
+            server_read_output.len = 0;
+            delete server_read_output.base;
+        }
+        if (server_write_input.len) {
+            server_write_input.len = 0;
+            delete server_write_input.base;
+        }
 
-    //     if (client_read_output.empty() && server_read_output.empty() && client_write_output.empty() && server_write_output.empty()) {
-    //         break;
-    //     }
-    // }
+        if (server_read_write) {
+            break;
+        }
 
-    //client_write_input.push_back(input_buffer);
-    // std::cout << "client_session->write_ssl " << client_session->write_ssl(client_write_input, client_write_output) << std::endl;
-    // std::cout << "server_session->read_ssl " << server_session->read_ssl(client_write_output, server_read_output) << std::endl;
-    // for (std::deque<uv_buf_t>::const_iterator it = server_read_output.begin();
-    //      it != server_read_output.end();
-    //      ++it)
-    // {
-    //     std::cout << __FILE__ << ":" << __LINE__ << " buf.len " << it->len << std::endl;
-    // }
+        if (!ssl_established
+            && server_session->handshake_done()
+            && client_session->handshake_done()) {
+            // char ciphers[1024];
+
+            // client_session->ciphers(ciphers, sizeof(ciphers));
+            // std::cout << ciphers << std::endl;
+
+            // client_session->ciphers(ciphers, sizeof(ciphers));
+            // std::cout << ciphers << std::endl;
+
+            client_write_input.base = new char[strlen(client_string)];
+            strcpy(client_write_input.base, client_string);
+            client_write_input.len = strlen(client_string);
+
+            server_write_input.base = new char[strlen(server_string)];
+            strcpy(server_write_input.base, server_string);
+            server_write_input.len = strlen(server_string);
+
+            ssl_established = true;
+        }
+
+        if (!client_read
+            && !server_read
+            && !client_read_output.len
+            && !server_read_output.len
+            && !client_write_output.len
+            && !server_write_output.len
+            && client_string_received
+            && server_string_received) {
+            break;
+        }
+    }
+
+    CHECK(client_string_received
+          && server_string_received);
+
     return true;
 }
 
@@ -378,5 +391,6 @@ main() {
     TEST(test_startup_prepare());
     TEST(test_query_query());
     TEST(test_query_query_paging());
+    TEST(test_ssl());
     return 0;
 }
