@@ -44,13 +44,22 @@
 #define MESSAGE_SLOTS 128
 
 struct Context {
-  uv_loop_t* loop;
+  uv_loop_t*  loop;
+  SSLContext* ssl;
 
   explicit
   Context(
       uv_loop_t* loop) :
       loop(loop)
   {}
+
+  SSLSession*
+  ssl_session_new() {
+    if (ssl) {
+      return ssl->session_new();
+    }
+    return NULL;
+  }
 
   inline void
   log(
@@ -129,6 +138,7 @@ struct ClientConnection {
   uv_tcp_t                 socket;
   // ssl stuff
   SSLSession*              ssl;
+  bool                     ssl_handshake_done;
   // supported stuff sent in start up message
   std::string              compression;
   std::string              cql_version;
@@ -144,7 +154,8 @@ struct ClientConnection {
       address_family(PF_INET),  // use ipv4 by default
       hostname("localhost"),
       port("9042"),
-      ssl(NULL),
+      ssl(context->ssl_session_new()),
+      ssl_handshake_done(false),
       cql_version("3.0.0") {
     for (int i = STREAM_ID_MIN; i < STREAM_ID_MAX + 1; ++i) {
       available_streams[i - STREAM_ID_MIN] = i;
@@ -158,6 +169,10 @@ struct ClientConnection {
     resolver_hints.ai_protocol = IPPROTO_TCP;
     resolver_hints.ai_flags = 0;
     memset(address_string, 0, ADDRESS_MAX_LENGTH);
+    if (ssl) {
+      ssl->init();
+      ssl->handshake(true);
+    }
   }
 
   void
@@ -282,8 +297,82 @@ struct ClientConnection {
     }
 
     // TODO(mstump) SSL
-    connection->consume(buf.base, nread);
+    if (connection->ssl) {
+      char*  read_input        = buf.base;
+      size_t read_input_size   = nread;
+
+      for (;;) {
+        size_t read_size         = 0;
+        char*  read_output       = NULL;
+        size_t read_output_size  = 0;
+        char*  write_output      = NULL;
+        size_t write_output_size = 0;
+
+        // TODO(mstump) error handling
+        connection->ssl->read_write(
+            read_input,
+            read_input_size,
+            read_size,
+            &read_output,
+            read_output_size,
+            NULL,
+            0,
+            &write_output,
+            write_output_size);
+
+        if (read_output && read_output_size) {
+          // TODO(mstump) error handling
+          connection->consume(read_output, read_output_size);
+          delete read_output;
+        }
+
+        if (write_output && write_output_size) {
+          connection->send_data(write_output, write_output_size);
+          // delete of write_output will be handled by on_write
+        }
+
+        if (read_size < read_input_size) {
+          read_input += read_size;
+          read_input_size -= read_size;
+        } else {
+          break;
+        }
+
+        if (!connection->ssl_handshake_done) {
+          if (connection->ssl->handshake_done()) {
+            connection->state = CLIENT_STATE_HANDSHAKE;
+            connection->event_received();
+          }
+        }
+      }
+    } else {
+      connection->consume(buf.base, nread);
+    }
     free_buffer(buf);
+  }
+
+  int
+  send_data(
+      char* input,
+      size_t size) {
+    return send_data(uv_buf_init(input, size));
+  }
+
+  int
+  send_data(
+      uv_buf_t buf) {
+    uv_write_t        *req  = new uv_write_t;
+    write_req_data_t*  data = new write_req_data_t;
+    data->buf               = buf;
+    data->connection        = this;
+    req->data               = data;
+    uv_write(
+        req,
+        reinterpret_cast<uv_stream_t*>(&socket),
+        &buf,
+        1,
+        ClientConnection::on_write);
+    return CQL_ERROR_NO_ERROR;
   }
 
   void
@@ -338,8 +427,12 @@ struct ClientConnection {
   void
   ssl_handshake() {
     if (ssl) {
-      // TODO(mstump)
-      // ssl->handshake(true);
+      // calling read on a handshaked initiated ssl pipe
+      // will gives us the first message to send to the server
+      on_read(
+          reinterpret_cast<uv_stream_t*>(&socket),
+          0,
+          alloc_buffer(0));
     } else {
       state = CLIENT_STATE_HANDSHAKE;
       event_received();
@@ -468,19 +561,7 @@ struct ClientConnection {
       Message* message) {
     uv_buf_t buf;
     message->prepare(&buf.base, buf.len);
-
-    uv_write_t        *req  = new uv_write_t;
-    write_req_data_t*  data = new write_req_data_t;
-    data->buf               = buf;
-    data->connection        = this;
-    req->data               = data;
-    uv_write(
-        req,
-        reinterpret_cast<uv_stream_t*>(&socket),
-        &buf,
-        1,
-        ClientConnection::on_write);
-    return CQL_ERROR_NO_ERROR;
+    return send_data(buf);
   }
 
   static void
@@ -520,7 +601,6 @@ struct ClientConnection {
     connection->event_received();
   }
 
-
   void
   resolve() {
     context->log(CQL_LOG_DEBUG, "resolve");
@@ -545,17 +625,4 @@ main() {
   ClientConnection connection(&context);
   connection.resolve();
   return uv_run(context.loop, UV_RUN_DEFAULT);
-
-  // uv_tcp_t server;
-  // uv_tcp_init(context.loop, &server);
-  // server.data = &context;
-
-  // struct sockaddr_in bind_addr = uv_ip4_addr("127.0.0.1", 7777);
-  // uv_tcp_bind(&server, bind_addr);
-
-  // if (uv_listen(reinterpret_cast<uv_stream_t*>(&server), 128, on_new_connection)) {
-  //     fprintf(stderr, "Listen error %s\n", uv_err_name(uv_last_error(context.loop)));
-  //     return 1;
-  // }
-  // return uv_run(context.loop, UV_RUN_DEFAULT);
 }

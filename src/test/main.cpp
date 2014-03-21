@@ -268,11 +268,15 @@ test_ssl() {
     for (;;) {
         size_t client_read = 0;
         int client_read_write = client_session->read_write(
-            server_write_output,
-            client_read_output,
+            server_write_output.base,
+            server_write_output.len,
             client_read,
-            client_write_input,
-            client_write_output);
+            &(client_read_output.base),
+            client_read_output.len,
+            client_write_input.base,
+            client_write_input.len,
+            &(client_write_output.base),
+            client_write_output.len);
 
         // std::cout << "client_session->read_write: " << client_read_write;
         // std::cout << ", client_read: " << client_read;
@@ -305,11 +309,15 @@ test_ssl() {
 
         size_t server_read = 0;
         int server_read_write = server_session->read_write(
-            client_write_output,
-            server_read_output,
+            client_write_output.base,
+            client_write_output.len,
             server_read,
-            server_write_input,
-            server_write_output);
+            &(server_read_output.base),
+            server_read_output.len,
+            server_write_input.base,
+            server_write_input.len,
+            &(server_write_output.base),
+            server_write_output.len);
 
         // std::cout << "server_session->read_write: " << server_read_write;
         // std::cout << ", server_read: " << server_read;

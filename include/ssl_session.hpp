@@ -110,13 +110,17 @@ class SSLSession {
 
   int
   read_write(
-      uv_buf_t  read_input,
-      uv_buf_t& read_output,
-      size_t&   read_size,
-      uv_buf_t  write_input,
-      uv_buf_t& write_output) {
-    if (write_input.len) {
-      int write_status = BIO_write(ssl_bio, write_input.base, write_input.len);
+      char*   read_input,
+      size_t  read_input_size,
+      size_t& read_size,
+      char**  read_output,
+      size_t& read_output_size,
+      char*   write_input,
+      size_t  write_input_size,
+      char**  write_output,
+      size_t& write_output_size) {
+    if (write_input_size) {
+      int write_status = BIO_write(ssl_bio, write_input, write_input_size);
       if (!check_error(write_status)) {
         ERR_print_errors_fp(stdout);
         return CQL_ERROR_SSL_WRITE;
@@ -124,23 +128,24 @@ class SSLSession {
     }
 
     int pending = BIO_ctrl_pending(ssl_bio);
+
     if (pending) {
-      read_output.base = new char[pending];
-      int read         = BIO_read(ssl_bio, read_output.base, pending);
+      *read_output = new char[pending];
+      int read     = BIO_read(ssl_bio, *read_output, pending);
 
       if (!check_error(read)) {
         return CQL_ERROR_SSL_READ;
       }
-      read_output.len = read;
+      read_output_size = read;
     }
 
-    if (read_input.len > 0) {
+    if (read_input_size > 0) {
       if ((read_size = BIO_get_write_guarantee(network_bio))) {
-        if (read_size > read_input.len) {
-          read_size = read_input.len;
+        if (read_size > read_input_size) {
+          read_size = read_input_size;
         }
 
-        if (!check_error(BIO_write(network_bio, read_input.base, read_size))) {
+        if (!check_error(BIO_write(network_bio, read_input, read_size))) {
           return CQL_ERROR_SSL_READ;
         }
       }
@@ -148,14 +153,14 @@ class SSLSession {
       read_size = 0;
     }
 
-    write_output.len = BIO_ctrl_pending(network_bio);
-    if (write_output.len) {
-      write_output.base = new char[write_output.len];
+    write_output_size = BIO_ctrl_pending(network_bio);
+    if (write_output_size) {
+      *write_output = new char[write_output_size];
       if (!check_error(
               BIO_read(
                   network_bio,
-                  write_output.base,
-                  write_output.len))) {
+                  *write_output,
+                  write_output_size))) {
         return CQL_ERROR_SSL_WRITE;
       }
     }
@@ -181,17 +186,6 @@ class SSLSession {
     }
     return true;
   }
-
-  // c->ssl = SSL_new(c->ssl_ctx);
-  // c->read_bio = BIO_new(BIO_s_mem());
-  // c->write_bio = BIO_new(BIO_s_mem());
-  // SSL_set_bio(c->ssl, c->read_bio, c->write_bio);
-  // SSL_set_connect_state(c->ssl);
-
-  // r = SSL_do_handshake(c->ssl);
-
-  // if(!SSL_is_init_finished(c->ssl)) {
-  //    int r = SSL_connect(c->ssl);
 };
 
 #endif
