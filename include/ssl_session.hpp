@@ -32,7 +32,7 @@
 #include <string>
 
 #include "common.hpp"
-#include "cql_error.hpp"
+#include "error.hpp"
 
 #define BUFFER_SIZE 66560
 
@@ -47,7 +47,7 @@ namespace cql {
       err,                                      \
       message,                                  \
       sizeof(message));                         \
-  return new cql::CQLError(                     \
+  return new cql::Error(                        \
       CQL_ERROR_SOURCE_SSL,                     \
       err,                                      \
       std::string(message),                     \
@@ -123,7 +123,7 @@ class SSLSession {
     return SSL_CIPHER_description(sc, output, size);
   }
 
-  CQLError*
+  Error*
   read_write(
       char*   read_input,
       size_t  read_input_size,

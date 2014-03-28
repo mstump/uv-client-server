@@ -14,15 +14,15 @@
   limitations under the License.
 */
 
-#ifndef __CQL_ERROR_HPP_INCLUDED__
-#define __CQL_ERROR_HPP_INCLUDED__
+#ifndef __ERROR_HPP_INCLUDED__
+#define __ERROR_HPP_INCLUDED__
 
 #include <string>
 
 namespace cql {
 
-struct CQLError {
-  CQLError(
+struct Error {
+  Error(
       int                source,
       int                code,
       const std::string& message,

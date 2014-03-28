@@ -38,8 +38,6 @@ struct ClientConnection {
     CLIENT_STATE_HANDSHAKE,
     CLIENT_STATE_SUPPORTED,
     CLIENT_STATE_READY,
-    CLIENT_STATE_KS_SET,
-    CLIENT_STATE_ACCEPT_REQUESTS,
     CLIENT_STATE_DISCONNECTING,
     CLIENT_STATE_DISCONNECTED
   };
@@ -50,10 +48,11 @@ struct ClientConnection {
     CLIENT_COMPRESSION_LZ4
   };
 
-  typedef cql::Request<Message, Message> CallerRequest;
+  typedef int8_t Stream;
+  typedef cql::Request<Stream, Error*, Message*> CallerRequest;
   typedef std::function<void(ClientConnection*, Message*)> MessageCallback;
   typedef cql::StreamStorage<
-    int8_t,
+    Stream,
     MessageCallback,
     CQL_STREAM_ID_MAX> StreamStorageCollection;
 
@@ -86,7 +85,6 @@ struct ClientConnection {
   // supported stuff sent in start up message
   std::string              compression;
   std::string              cql_version;
-  std::string              keyspace;
 
   explicit
   ClientConnection(
@@ -136,9 +134,6 @@ struct ClientConnection {
         send_startup();
         break;
       case CLIENT_STATE_READY:
-        set_keyspace();
-        break;
-      case CLIENT_STATE_KS_SET:
         notify_ready();
         break;
       default:
@@ -178,6 +173,7 @@ struct ClientConnection {
         if (message->stream < 0) {
           // system event
           // TODO(mstump)
+          assert(false);
         } else {
           switch (message->opcode) {
             case CQL_OPCODE_SUPPORTED:
@@ -190,6 +186,7 @@ struct ClientConnection {
               on_ready(message);
               break;
             default:
+              assert(false);
               break;
           }
         }
@@ -288,14 +285,14 @@ struct ClientConnection {
     free_buffer(buf);
   }
 
-  CQLError*
+  Error*
   send_data(
       char* input,
       size_t size) {
     return send_data(uv_buf_init(input, size));
   }
 
-  CQLError*
+  Error*
   send_data(
       uv_buf_t buf) {
     uv_write_t        *req  = new uv_write_t;
@@ -415,30 +412,17 @@ struct ClientConnection {
 
   void
   set_keyspace(
-      std::string& ks) {
-    (void) ks;
-  }
-
-  void
-  set_keyspace() {
-    context->log(CQL_LOG_DEBUG, "set_keyspace");
-
-    if (!keyspace.empty()) {
-      Message    message(CQL_OPCODE_QUERY);
-      BodyQuery* query = static_cast<BodyQuery*>(message.body.get());
-      query->query_string("use ?;");
-      query->add_value(keyspace.c_str(), keyspace.size());
-      send_message(&message, NULL);
-    } else {
-      state = CLIENT_STATE_KS_SET;
-      event_received();
-    }
+      std::string& keyspace) {
+    Message    message(CQL_OPCODE_QUERY);
+    BodyQuery* query = static_cast<BodyQuery*>(message.body.get());
+    query->query_string("use ?;");
+    query->add_value(keyspace.c_str(), keyspace.size());
+    send_message(&message, NULL);
   }
 
   void
   notify_ready() {
     context->log(CQL_LOG_DEBUG, "notify_ready");
-    // TODO(mstump)
   }
 
   void
@@ -479,12 +463,12 @@ struct ClientConnection {
     delete req;
   }
 
-  CQLError*
+  Error*
   send_message(
       Message* message,
       MessageCallback callback) {
     uv_buf_t   buf;
-    CQLError*  err = stream_storage.set_stream(callback, message->stream);
+    Error*  err = stream_storage.set_stream(callback, message->stream);
     if (err) {
       return err;
     }

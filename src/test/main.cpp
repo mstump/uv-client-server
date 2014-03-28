@@ -331,7 +331,7 @@ test_ssl() {
 
   for (;;) {
     size_t client_read = 0;
-    cql::CQLError* err = client_session->read_write(
+    cql::Error* err = client_session->read_write(
         server_write_output.base,
         server_write_output.len,
         client_read,

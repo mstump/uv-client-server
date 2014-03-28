@@ -32,12 +32,12 @@ class StreamStorage {
     }
   }
 
-  inline CQLError*
+  inline Error*
   set_stream(
       const StorageType& input,
       IdType&      output) {
     if (available_streams_index_ >= Max) {
-      return new CQLError(
+      return new Error(
           CQL_ERROR_SOURCE_LIBRARY,
           CQL_ERROR_NO_STREAMS,
           "no available streams",
@@ -52,7 +52,7 @@ class StreamStorage {
     return CQL_ERROR_NO_ERROR;
   }
 
-  inline CQLError*
+  inline Error*
   get_stream(
       const IdType& input,
       StorageType&  output,
@@ -63,7 +63,7 @@ class StreamStorage {
         available_streams_[--available_streams_index_] = input;
         allocated_streams_[input] = false;
       } else {
-        return new CQLError(
+        return new Error(
             CQL_ERROR_SOURCE_LIBRARY,
             CQL_ERROR_NO_STREAMS,
             "this stream has already been released",

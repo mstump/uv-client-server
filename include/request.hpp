@@ -23,17 +23,18 @@
 namespace cql {
 
 template<typename Work,
+         typename Error,
          typename Result>
 struct Request {
-  typedef std::function<void(Request<Work, Result>*)> callable_t;
+  typedef std::function<void(Request<Work, Error, Result>*)> Callback;
 
   std::atomic<bool>       flag;
   std::mutex              mutex;
   std::condition_variable condition;
   Work                    work;
   Result                  result;
-  int                     error;
-  callable_t              callback;
+  Error                   error;
+  Callback                callback;
   uv_work_t               uv_work_req;
 
   Request() :
@@ -72,7 +73,7 @@ struct Request {
       uv_queue_work(
           loop,
           &uv_work_req,
-          &Request<Work, Result>::callback_executor,
+          &Request<Work, Error, Result>::callback_executor,
           NULL);
     }
   }
@@ -84,7 +85,7 @@ struct Request {
   wait() {
     if (!flag.load(std::memory_order_consume)) {
       std::unique_lock<std::mutex> lock(mutex);
-      condition.wait(lock, std::bind(&Request<Work, Result>::ready, this));
+      condition.wait(lock, std::bind(&Request<Work, Error, Result>::ready, this));
     }
   }
 
@@ -105,7 +106,7 @@ struct Request {
       return condition.wait_for(
           lock,
           time,
-          std::bind(&Request<Work, Result>::ready, this));
+          std::bind(&Request<Work, Error, Result>::ready, this));
     }
   }
 
@@ -121,8 +122,8 @@ struct Request {
       uv_work_t* work) {
     (void) work;
     if (work && work->data) {
-      Request<Work, Result>* request
-          = reinterpret_cast<Request<Work, Result>*>(work->data);
+      Request<Work, Error, Result>* request
+          = reinterpret_cast<Request<Work, Error, Result>*>(work->data);
 
       if (request->callback) {
         request->callback(request);
