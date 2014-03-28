@@ -46,15 +46,15 @@ struct Context {
 
 
 struct Connection {
-  Context* context;
-  size_t     state;
-  Message* incomming;
+  Context*      context;
+  size_t        state;
+  cql::Message* incomming;
 
   explicit
   Connection(
       Context* context) :
       context(context),
-      incomming(new Message())
+      incomming(new cql::Message())
   {}
 
   void
@@ -62,7 +62,7 @@ struct Connection {
       uv_buf_t buf) {
     if (incomming->consume(buf.base, buf.len)) {
       delete incomming;
-      incomming = new Message();
+      incomming = new cql::Message();
     }
   }
 };

@@ -1,27 +1,18 @@
-// This is free and unencumbered software released into the public domain.
+/*
+  Copyright 2014 DataStax
 
-// Anyone is free to copy, modify, publish, use, compile, sell, or
-// distribute this software, either in source code form or as a compiled
-// binary, for any purpose, commercial or non-commercial, and by any
-// means.
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
 
-// In jurisdictions that recognize copyright laws, the author or authors
-// of this software dedicate any and all copyright interest in the
-// software to the public domain. We make this dedication for the benefit
-// of the public at large and to the detriment of our heirs and
-// successors. We intend this dedication to be an overt act of
-// relinquishment in perpetuity of all present and future rights to this
-// software under copyright law.
+  http://www.apache.org/licenses/LICENSE-2.0
 
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
-// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
-// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
-// IN NO EVENT SHALL THE AUTHORS BE LIABLE FOR ANY CLAIM, DAMAGES OR
-// OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
-// ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
-// OTHER DEALINGS IN THE SOFTWARE.
-
-// For more information, please refer to <http://unlicense.org/>
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+*/
 
 #ifndef __SSL_SESSION_HPP_INCLUDED__
 #define __SSL_SESSION_HPP_INCLUDED__
@@ -38,8 +29,32 @@
 #include <openssl/pkcs12.h>
 
 #include <deque>
+#include <string>
+
+#include "common.hpp"
+#include "cql_error.hpp"
 
 #define BUFFER_SIZE 66560
+
+namespace cql {
+
+#define CQL_SSL_CHECK_ERROR(ssl, input) {       \
+  int  err    = SSL_get_error(ssl, input);      \
+  if (err    != SSL_ERROR_NONE                  \
+      && err != SSL_ERROR_WANT_READ) {          \
+  char message[1024];                           \
+  ERR_error_string_n(                           \
+      err,                                      \
+      message,                                  \
+      sizeof(message));                         \
+  return new cql::CQLError(                     \
+      CQL_ERROR_SOURCE_SSL,                     \
+      err,                                      \
+      std::string(message),                     \
+      __FILE__,                                 \
+      __LINE__);                                \
+  }                                             \
+}
 
 class SSLSession {
   SSL* ssl;
@@ -108,7 +123,7 @@ class SSLSession {
     return SSL_CIPHER_description(sc, output, size);
   }
 
-  int
+  CQLError*
   read_write(
       char*   read_input,
       size_t  read_input_size,
@@ -121,22 +136,15 @@ class SSLSession {
       size_t& write_output_size) {
     if (write_input_size) {
       int write_status = BIO_write(ssl_bio, write_input, write_input_size);
-      if (!check_error(write_status)) {
-        ERR_print_errors_fp(stdout);
-        return CQL_ERROR_SSL_WRITE;
-      }
+      CQL_SSL_CHECK_ERROR(ssl, write_status);
     }
 
     int pending = BIO_ctrl_pending(ssl_bio);
 
     if (pending) {
-      *read_output = new char[pending];
-      int read     = BIO_read(ssl_bio, *read_output, pending);
-
-      if (!check_error(read)) {
-        return CQL_ERROR_SSL_READ;
-      }
-      read_output_size = read;
+      *read_output     = new char[pending];
+      read_output_size = BIO_read(ssl_bio, *read_output, pending);
+      CQL_SSL_CHECK_ERROR(ssl, read_output_size);
     }
 
     if (read_input_size > 0) {
@@ -145,9 +153,7 @@ class SSLSession {
           read_size = read_input_size;
         }
 
-        if (!check_error(BIO_write(network_bio, read_input, read_size))) {
-          return CQL_ERROR_SSL_READ;
-        }
+        CQL_SSL_CHECK_ERROR(ssl, BIO_write(network_bio, read_input, read_size));
       }
     } else {
       read_size = 0;
@@ -156,36 +162,17 @@ class SSLSession {
     write_output_size = BIO_ctrl_pending(network_bio);
     if (write_output_size) {
       *write_output = new char[write_output_size];
-      if (!check_error(
-              BIO_read(
-                  network_bio,
-                  *write_output,
-                  write_output_size))) {
-        return CQL_ERROR_SSL_WRITE;
-      }
+
+      CQL_SSL_CHECK_ERROR(
+          ssl,
+          BIO_read(
+              network_bio,
+              *write_output,
+              write_output_size))
     }
 
-    return CQL_ERROR_NO_ERROR;
-  }
-
-  bool
-  check_error(
-      int input) {
-    int err = SSL_get_error(ssl, input);
-
-    if (err == SSL_ERROR_NONE || err == SSL_ERROR_WANT_READ) {
-      return true;
-    }
-
-    if (err == SSL_ERROR_SYSCALL) {
-      return false;
-    }
-
-    if (err == SSL_ERROR_SSL) {
-      return false;
-    }
-    return true;
+    return NULL;
   }
 };
-
+}
 #endif

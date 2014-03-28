@@ -14,28 +14,33 @@
   limitations under the License.
 */
 
-#ifndef __BODY_HPP_INCLUDED__
-#define __BODY_HPP_INCLUDED__
+#ifndef __CQL_ERROR_HPP_INCLUDED__
+#define __CQL_ERROR_HPP_INCLUDED__
+
+#include <string>
 
 namespace cql {
 
-struct Body {
-  virtual ~Body()
+struct CQLError {
+  CQLError(
+      int                source,
+      int                code,
+      const std::string& message,
+      const std::string& file,
+      int                line) :
+      source(source),
+      code(code),
+      message(message),
+      file(file),
+      line(line)
   {}
 
-  virtual uint8_t
-  opcode() = 0;
-
-  virtual bool
-  consume(
-      char*  buffer,
-      size_t size) = 0;
-
-  virtual bool
-  prepare(
-      size_t  reserved,
-      char**  output,
-      size_t& size) = 0;
+  int         source;
+  int         code;
+  std::string message;
+  std::string file;
+  int         line;
 };
 }
+
 #endif
