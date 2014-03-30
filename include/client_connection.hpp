@@ -49,11 +49,12 @@ struct ClientConnection {
   };
 
   typedef int8_t Stream;
-  typedef cql::Request<Stream, Error*, Message*> CallerRequest;
-  typedef std::function<void(ClientConnection*, Message*)> MessageCallback;
+  typedef cql::Request<Error*, Message*> CallerRequest;
+  typedef std::function<void(ClientConnection*, Error*)> ConnectionCallback;
+
   typedef cql::StreamStorage<
     Stream,
-    MessageCallback,
+    CallerRequest*,
     CQL_STREAM_ID_MAX> StreamStorageCollection;
 
   struct WriteRequestData {
@@ -65,6 +66,7 @@ struct ClientConnection {
   ClientContext*           context;
   std::unique_ptr<Message> incomming;
   StreamStorageCollection  stream_storage;
+  ConnectionCallback       connect_callback;
 
   // DNS and hostname stuff
   struct sockaddr_in       address;
@@ -180,7 +182,7 @@ struct ClientConnection {
               on_supported(message);
               break;
             case CQL_OPCODE_ERROR:
-              on_error_stream_zero(message);
+              on_error(message);
               break;
             case CQL_OPCODE_READY:
               on_ready(message);
@@ -287,7 +289,7 @@ struct ClientConnection {
 
   Error*
   send_data(
-      char* input,
+      char*  input,
       size_t size) {
     return send_data(uv_buf_init(input, size));
   }
@@ -374,16 +376,22 @@ struct ClientConnection {
   }
 
   void
-  on_error_stream_zero(
+  on_error(
       Message* response) {
-    context->log(CQL_LOG_DEBUG, "on_error_stream_zero");
+    context->log(CQL_LOG_DEBUG, "on_error");
     BodyError* error = static_cast<BodyError*>(response->body.get());
 
-    // TODO(mstump) do something with the supported info
-    context->log(CQL_LOG_ERROR, error->message);
+    if (state < CLIENT_STATE_READY) {
+      notify_error(
+          new Error(
+              CQL_ERROR_SOURCE_SERVER,
+              0,
+              error->message,
+              __FILE__,
+              __LINE__));
+    }
 
     delete response;
-    event_received();
   }
 
   void
@@ -412,17 +420,28 @@ struct ClientConnection {
 
   void
   set_keyspace(
-      std::string& keyspace) {
+      const std::string& keyspace) {
     Message    message(CQL_OPCODE_QUERY);
     BodyQuery* query = static_cast<BodyQuery*>(message.body.get());
-    query->query_string("use ?;");
-    query->add_value(keyspace.c_str(), keyspace.size());
+    query->query_string("USE " + keyspace);
     send_message(&message, NULL);
   }
 
   void
   notify_ready() {
     context->log(CQL_LOG_DEBUG, "notify_ready");
+    if (connect_callback) {
+      connect_callback(this, NULL);
+    }
+  }
+
+  void
+  notify_error(
+      Error* err) {
+    context->log(CQL_LOG_DEBUG, "notify_error");
+    if (connect_callback) {
+      connect_callback(this, err);
+    }
   }
 
   void
@@ -463,12 +482,26 @@ struct ClientConnection {
     delete req;
   }
 
+  CallerRequest*
+  exec(
+      Message* message,
+      CallerRequest::Callback callback = NULL) {
+    CallerRequest* request = new CallerRequest();
+    request->callback = callback;
+    Error* err = send_message(message, request);
+    if (err) {
+      request->error = err;
+      request->notify(context->loop);
+    }
+    return request;
+  }
+
   Error*
   send_message(
       Message* message,
-      MessageCallback callback) {
+      CallerRequest* request = NULL) {
     uv_buf_t   buf;
-    Error*  err = stream_storage.set_stream(callback, message->stream);
+    Error*     err = stream_storage.set_stream(request, message->stream);
     if (err) {
       return err;
     }
@@ -489,9 +522,9 @@ struct ClientConnection {
 
   static void
   on_resolve(
-      uv_getaddrinfo_t *resolver,
+      uv_getaddrinfo_t* resolver,
       int               status,
-      struct addrinfo  *res) {
+      struct addrinfo*  res) {
     ClientConnection* connection
         = reinterpret_cast<ClientConnection*>(resolver->data);
 
@@ -502,7 +535,7 @@ struct ClientConnection {
       // TODO(mstump)
       fprintf(
           stderr,
-          "getaddrinfo callback error %s\n",
+          "getaddrinfo request error %s\n",
           uv_err_name(uv_last_error(connection->context->loop)));
       return;
     }
@@ -534,6 +567,13 @@ struct ClientConnection {
         hostname.c_str(),
         port.c_str(),
         &resolver_hints);
+  }
+
+  void
+  init(
+      ConnectionCallback request) {
+    connect_callback = request;
+    event_received();
   }
 
  private:

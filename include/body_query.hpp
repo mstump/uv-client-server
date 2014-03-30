@@ -119,12 +119,16 @@ class BodyQuery
 
   bool
   prepare(
-      size_t  reserved,
-      char**  output,
+      size_t reserved,
+      char** output,
       size_t& size) {
     uint8_t  flags  = 0x00;
-    size            = reserved + sizeof(int32_t);
-    size           += _query.size() + sizeof(int16_t) + 1;
+    // reserved + the long string
+    size            = reserved + sizeof(int32_t) + _query.size();
+    // consistency
+    size           += sizeof(int16_t);
+    // flags
+    size           += 1;
 
     if (_serial_consistent) {
       flags |= CQL_QUERY_FLAG_SERIAL_CONSISTENCY;
@@ -137,10 +141,11 @@ class BodyQuery
     }
 
     if (!_values.empty()) {
+      size += sizeof(int16_t);
       for (value_collection_t::const_iterator it = _values.begin();
            it != _values.end();
            ++it) {
-        size += it->second;
+        size += (sizeof(int32_t) + it->second);
       }
       flags |= CQL_QUERY_FLAG_VALUES;
     }
@@ -170,7 +175,7 @@ class BodyQuery
       for (value_collection_t::const_iterator it = _values.begin();
            it != _values.end();
            ++it) {
-        buffer = encode_string(buffer, it->first, it->second);
+        buffer = encode_long_string(buffer, it->first, it->second);
       }
     }
 

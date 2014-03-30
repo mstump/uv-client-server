@@ -56,10 +56,25 @@ char TEST_MESSAGE_QUERY[] = {
   0x53, 0x45, 0x4c, 0x45, 0x43, 0x54,              // SELECT
   0x20, 0x2a, 0x20,                                //  *
   0x46, 0x52, 0x4f, 0x4d, 0x20,                    // FROM
-  0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e,        // peers;
-  0x70, 0x65, 0x65, 0x72, 0x73, 0x3b,              // system.peers;
+  0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e,        // system.
+  0x70, 0x65, 0x65, 0x72, 0x73, 0x3b,              // peers;
   0x00, 0x01,                                      // consistency
   0x00                                             // flags
+};
+
+char TEST_MESSAGE_QUERY_VALUE[] = {
+  0x02, 0x00, 0x00, 0x07, 0x00, 0x00, 0x00, 0x27,  // header
+  0x00, 0x00, 0x00, 0x10,                          // string length (16)
+  0x53, 0x45, 0x4c, 0x45, 0x43, 0x54,              // SELECT
+  0x20, 0x2a, 0x20,                                //  *
+  0x46, 0x52, 0x4f, 0x4d, 0x20,                    // FROM
+  0x3f, 0x3b,                                      // ?;
+  0x00, 0x01,                                      // consistency
+  0x01,                                            // flags
+  0x00, 0x01,                                      // values size
+  0x00, 0x0c,                                      // value size 12
+  0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e,        // system.
+  0x70, 0x65, 0x65, 0x72, 0x73,                    // peers
 };
 
 char TEST_MESSAGE_QUERY_PAGING[] = {
@@ -68,8 +83,8 @@ char TEST_MESSAGE_QUERY_PAGING[] = {
   0x53, 0x45, 0x4c, 0x45, 0x43, 0x54,              // SELECT
   0x20, 0x2a, 0x20,                                //  *
   0x46, 0x52, 0x4f, 0x4d, 0x20,                    // FROM
-  0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e,        // peers;
-  0x70, 0x65, 0x65, 0x72, 0x73, 0x3b,              // system.peers;
+  0x73, 0x79, 0x73, 0x74, 0x65, 0x6d, 0x2e,        // system.
+  0x70, 0x65, 0x65, 0x72, 0x73, 0x3b,              // peers;
   0x00, 0x01,                                      // consistency
   0x08,                                            // flags
   0x00, 0x06,                                      // length 6
@@ -188,6 +203,38 @@ test_query_query() {
       memcmp(TEST_MESSAGE_QUERY,
              buffer.get(),
              sizeof(TEST_MESSAGE_QUERY)),
+      0);
+  return true;
+}
+
+bool
+test_query_query_value() {
+  cql::Message          message(CQL_OPCODE_QUERY);
+  std::unique_ptr<char> buffer;
+  char*                 buffer_ptr;
+  size_t                size;
+  const char*           value = "system.peers";
+
+  CHECK(message.body);
+  cql::BodyQuery* query = static_cast<cql::BodyQuery*>(message.body.get());
+  query->query_string("SELECT * FROM ?;");
+  query->add_value(value, strlen(value));
+  query->consistency(CQL_CONSISTENCY_ONE);
+
+  CHECK(message.prepare(&buffer_ptr, size));
+  buffer.reset(buffer_ptr);
+
+  print_hex(buffer_ptr, size);
+  std::cout << std::endl;
+
+  print_hex(TEST_MESSAGE_QUERY_VALUE, sizeof(TEST_MESSAGE_QUERY_VALUE));
+  std::cout << std::endl;
+
+  CHECK_EQUAL(sizeof(TEST_MESSAGE_QUERY_VALUE), size);
+  CHECK_EQUAL(
+      memcmp(TEST_MESSAGE_QUERY_VALUE,
+             buffer.get(),
+             sizeof(TEST_MESSAGE_QUERY_VALUE)),
       0);
   return true;
 }
@@ -453,13 +500,14 @@ test_ssl() {
 
 int
 main() {
-  TEST(test_error_consume());
-  TEST(test_error_prepare());
-  TEST(test_options_prepare());
-  TEST(test_startup_prepare());
-  TEST(test_query_query());
-  TEST(test_query_query_paging());
-  TEST(test_ssl());
-  TEST(test_stream_storage());
+  // TEST(test_error_consume());
+  // TEST(test_error_prepare());
+  // TEST(test_options_prepare());
+  // TEST(test_startup_prepare());
+  // TEST(test_query_query());
+  // TEST(test_query_query_paging());
+  // TEST(test_ssl());
+  // TEST(test_stream_storage());
+  TEST(test_query_query_value());
   return 0;
 }

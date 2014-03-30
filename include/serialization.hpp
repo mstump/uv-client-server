@@ -118,7 +118,6 @@ decode_string_map(
   int16_t len    = 0;
   char*   buffer = decode_short(input, len);
 
-
   for (int i = 0; i < len; i++) {
     char*  key        = 0;
     size_t key_size   = 0;

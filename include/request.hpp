@@ -22,25 +22,25 @@
 
 namespace cql {
 
-template<typename Work,
-         typename Error,
+template<typename Error,
          typename Result>
 struct Request {
-  typedef std::function<void(Request<Work, Error, Result>*)> Callback;
+  typedef std::function<void(Request<Error, Result>*)> Callback;
 
   std::atomic<bool>       flag;
   std::mutex              mutex;
   std::condition_variable condition;
-  Work                    work;
   Result                  result;
   Error                   error;
   Callback                callback;
+  bool                    use_local_loop;
   uv_work_t               uv_work_req;
 
   Request() :
       flag(false),
       error(CQL_ERROR_NO_ERROR),
-      callback(NULL)
+      callback(NULL),
+      use_local_loop(false)
   {}
 
   bool
@@ -67,14 +67,18 @@ struct Request {
     condition.notify_all();
 
     if (callback) {
-      // we execute the callback in a separate thread so that badly
-      // behaving client code can't interfere with event/network handling
-      uv_work_req.data = this;
-      uv_queue_work(
-          loop,
-          &uv_work_req,
-          &Request<Work, Error, Result>::callback_executor,
-          NULL);
+      if (use_local_loop) {
+        callback(this);
+      } else {
+        // we execute the callback in a separate thread so that badly
+        // behaving client code can't interfere with event/network handling
+        uv_work_req.data = this;
+        uv_queue_work(
+            loop,
+            &uv_work_req,
+            &Request<Error, Result>::callback_executor,
+            NULL);
+      }
     }
   }
 
@@ -85,7 +89,7 @@ struct Request {
   wait() {
     if (!flag.load(std::memory_order_consume)) {
       std::unique_lock<std::mutex> lock(mutex);
-      condition.wait(lock, std::bind(&Request<Work, Error, Result>::ready, this));
+      condition.wait(lock, std::bind(&Request<Error, Result>::ready, this));
     }
   }
 
@@ -106,7 +110,7 @@ struct Request {
       return condition.wait_for(
           lock,
           time,
-          std::bind(&Request<Work, Error, Result>::ready, this));
+          std::bind(&Request<Error, Result>::ready, this));
     }
   }
 
@@ -122,8 +126,8 @@ struct Request {
       uv_work_t* work) {
     (void) work;
     if (work && work->data) {
-      Request<Work, Error, Result>* request
-          = reinterpret_cast<Request<Work, Error, Result>*>(work->data);
+      Request<Error, Result>* request
+          = reinterpret_cast<Request<Error, Result>*>(work->data);
 
       if (request->callback) {
         request->callback(request);

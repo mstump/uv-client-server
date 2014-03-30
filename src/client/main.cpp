@@ -37,10 +37,23 @@
 
 #include "client_connection.hpp"
 
+void
+ready(
+    cql::ClientConnection* connection,
+    cql::Error*            err) {
+
+  if (err) {
+    std::cout << err->message << std::endl;
+  } else {
+    std::cout << "ready" << std::endl;
+    connection->set_keyspace("system");
+  }
+}
+
 int
 main() {
   cql::ClientContext    context(uv_default_loop());
   cql::ClientConnection connection(&context);
-  connection.resolve();
+  connection.init(ready);
   return uv_run(context.loop, UV_RUN_DEFAULT);
 }
