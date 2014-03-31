@@ -21,6 +21,7 @@
 #include "body_options.hpp"
 #include "body_query.hpp"
 #include "body_ready.hpp"
+#include "body_result.hpp"
 #include "body_startup.hpp"
 #include "body_supported.hpp"
 
@@ -42,6 +43,7 @@ struct Message {
   std::unique_ptr<char> body_buffer;
   char*                 body_buffer_pos;
   bool                  body_ready;
+  bool                  body_error;
 
   Message() :
       version(0x02),
@@ -73,6 +75,9 @@ struct Message {
   allocate_body(
       uint8_t  opcode) {
     switch (opcode) {
+      case CQL_OPCODE_RESULT:
+        return static_cast<Body*>(new BodyResult());
+
       case CQL_OPCODE_ERROR:
         return static_cast<Body*>(new BodyError());
 
@@ -90,6 +95,7 @@ struct Message {
 
       case CQL_OPCODE_READY:
         return static_cast<Body*>(new BodyReady());
+
       default:
         assert(false);
     }
@@ -180,7 +186,7 @@ struct Message {
       input_pos       += needed;
 
       if (!body->consume(body_buffer.get() + CQL_HEADER_SIZE, length)) {
-        return -1;
+        body_error = true;
       }
       body_ready = true;
     } else {

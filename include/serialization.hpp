@@ -85,6 +85,15 @@ encode_string(
 }
 
 inline char*
+decode_long_string(
+    char*   input,
+    char**  output,
+    size_t& size) {
+  *output = decode_int(input, ((int32_t&) size));
+  return *output + size;
+}
+
+inline char*
 encode_long_string(
     char*       output,
     const char* input,
@@ -171,6 +180,19 @@ decode_string_multimap(
     buffer = decode_string(buffer, &key, key_size);
     buffer = decode_stringlist(buffer, value);
     output.insert(std::make_pair(std::string(key, key_size), value));
+  }
+  return buffer;
+}
+
+inline char*
+decode_option(
+    char*    input,
+    int16_t& type,
+    char**   class_name,
+    size_t&  class_name_size) {
+  char* buffer = decode_short(input, type);
+  if (type == CQL_COLUMN_TYPE_CUSTOM) {
+    buffer = decode_string(buffer, class_name, class_name_size);
   }
   return buffer;
 }

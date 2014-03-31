@@ -50,6 +50,16 @@ ready(
   }
 }
 
+void
+keyspace_set(
+    cql::ClientConnection* connection,
+    char*                  keyspace,
+    size_t                 size) {
+  (void) connection;
+  (void) size;
+  std::cout << "keyspace_set: " << keyspace << std::endl;
+}
+
 int
 main() {
   cql::ClientContext    context(uv_default_loop());

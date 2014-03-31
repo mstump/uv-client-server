@@ -48,9 +48,26 @@ struct ClientConnection {
     CLIENT_COMPRESSION_LZ4
   };
 
+  enum SchemaEventType {
+    CLIENT_EVENT_SCHEMA_CREATED,
+    CLIENT_EVENT_SCHEMA_UPDATED,
+    CLIENT_EVENT_SCHEMA_DROPPED
+  };
+
   typedef int8_t Stream;
+
   typedef cql::Request<Error*, Message*> CallerRequest;
-  typedef std::function<void(ClientConnection*, Error*)> ConnectionCallback;
+
+  typedef std::function<void(ClientConnection*,
+                             Error*)> ConnectionCallback;
+
+  typedef std::function<void(ClientConnection*,
+                             const char*, size_t)> KeyspaceCallback;
+
+  typedef std::function<void(ClientConnection*,
+                             SchemaEventType,
+                             const char*, size_t,
+                             const char*, size_t)> SchemaCallback;
 
   typedef cql::StreamStorage<
     Stream,
@@ -67,6 +84,7 @@ struct ClientConnection {
   std::unique_ptr<Message> incomming;
   StreamStorageCollection  stream_storage;
   ConnectionCallback       connect_callback;
+  KeyspaceCallback         keyspace_callback;
 
   // DNS and hostname stuff
   struct sockaddr_in       address;
@@ -186,6 +204,9 @@ struct ClientConnection {
               break;
             case CQL_OPCODE_READY:
               on_ready(message);
+              break;
+            case CQL_OPCODE_RESULT:
+              on_result(message);
               break;
             default:
               assert(false);
@@ -373,6 +394,15 @@ struct ClientConnection {
       state = CLIENT_STATE_HANDSHAKE;
       event_received();
     }
+  }
+
+  void
+  on_result(
+      Message* response) {
+    context->log(CQL_LOG_DEBUG, "on_result");
+    BodyResult* result = static_cast<BodyResult*>(response->body.get());
+    (void) result;
+    delete response;
   }
 
   void
@@ -571,8 +601,17 @@ struct ClientConnection {
 
   void
   init(
-      ConnectionCallback request) {
-    connect_callback = request;
+      ConnectionCallback connect  = NULL,
+      KeyspaceCallback   keyspace = NULL
+      // SchemaCallback     schema   = NULL,
+      // TopologyCallback   topology = NULL,
+      // StatusCallback     status   = NULL
+       ) {
+    connect_callback  = connect;
+    keyspace_callback = keyspace;
+    // schema_callback   = schema;
+    // topology_callback = topology;
+    // status_callback   = status;
     event_received();
   }
 
