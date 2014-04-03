@@ -53,17 +53,25 @@ ready(
 void
 keyspace_set(
     cql::ClientConnection* connection,
-    char*                  keyspace,
+    const char*            keyspace,
     size_t                 size) {
   (void) connection;
   (void) size;
   std::cout << "keyspace_set: " << keyspace << std::endl;
 }
 
+void
+error(
+    cql::ClientConnection* connection,
+    cql::Error*            err) {
+  (void) connection;
+  std::cout << "error: " << err->message << std::endl;
+}
+
 int
 main() {
   cql::ClientContext    context(uv_default_loop());
   cql::ClientConnection connection(&context);
-  connection.init(ready);
+  connection.init(ready, error, keyspace_set);
   return uv_run(context.loop, UV_RUN_DEFAULT);
 }

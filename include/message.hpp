@@ -19,6 +19,7 @@
 
 #include "body_error.hpp"
 #include "body_options.hpp"
+#include "body_prepare.hpp"
 #include "body_query.hpp"
 #include "body_ready.hpp"
 #include "body_result.hpp"
@@ -77,6 +78,9 @@ struct Message {
     switch (opcode) {
       case CQL_OPCODE_RESULT:
         return static_cast<Body*>(new BodyResult());
+
+      case CQL_OPCODE_PREPARE:
+        return static_cast<Body*>(new BodyPrepare());
 
       case CQL_OPCODE_ERROR:
         return static_cast<Body*>(new BodyError());
@@ -185,7 +189,7 @@ struct Message {
       body_buffer_pos += needed;
       input_pos       += needed;
 
-      if (!body->consume(body_buffer.get() + CQL_HEADER_SIZE, length)) {
+      if (!body->consume(body_buffer.get(), length)) {
         body_error = true;
       }
       body_ready = true;

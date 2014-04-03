@@ -56,7 +56,7 @@ struct ClientConnection {
 
   typedef int8_t Stream;
 
-  typedef cql::Request<Error*, Message*> CallerRequest;
+  typedef cql::Request<std::string, Error*, Message*> CallerRequest;
 
   typedef std::function<void(ClientConnection*,
                              Error*)> ConnectionCallback;
@@ -68,6 +68,13 @@ struct ClientConnection {
                              SchemaEventType,
                              const char*, size_t,
                              const char*, size_t)> SchemaCallback;
+
+  typedef std::function<void(ClientConnection*,
+                             Error*,
+                             const char*, size_t,
+                             const char*, size_t)> PrepareCallback;
+
+  typedef std::function<void(ClientConnection*, Error*)> ErrorCallback;
 
   typedef cql::StreamStorage<
     Stream,
@@ -85,6 +92,8 @@ struct ClientConnection {
   StreamStorageCollection  stream_storage;
   ConnectionCallback       connect_callback;
   KeyspaceCallback         keyspace_callback;
+  PrepareCallback          prepare_callback;
+  ErrorCallback            error_callback;
 
   // DNS and hostname stuff
   struct sockaddr_in       address;
@@ -253,7 +262,6 @@ struct ClientConnection {
       return;
     }
 
-    // TODO(mstump) SSL
     if (connection->ssl) {
       char*  read_input        = buf.base;
       size_t read_input_size   = nread;
@@ -400,9 +408,60 @@ struct ClientConnection {
   on_result(
       Message* response) {
     context->log(CQL_LOG_DEBUG, "on_result");
-    BodyResult* result = static_cast<BodyResult*>(response->body.get());
-    (void) result;
-    delete response;
+
+    Error*         err     = NULL;
+    CallerRequest* request = NULL;
+    BodyResult*    result  = static_cast<BodyResult*>(response->body.get());
+
+    switch (result->kind) {
+      case CQL_RESULT_KIND_SET_KEYSPACE:
+        if (keyspace_callback) {
+          keyspace_callback(this, result->keyspace, result->keyspace_size);
+        }
+        break;
+
+      case CQL_RESULT_KIND_PREPARED:
+        err = stream_storage.get_stream(response->stream, request);
+        if (prepare_callback) {
+          if (!err) {
+            prepare_callback(
+                this,
+                NULL,
+                request->data.c_str(),
+                request->data.size(),
+                result->prepared,
+                result->prepared_size);
+          } else {
+            prepare_callback(
+                this,
+                err,
+                request->data.c_str(),
+                request->data.size(),
+                result->prepared,
+                result->prepared_size);
+          }
+        }
+
+        if (!err) {
+          request->result = response;
+          request->notify(context->loop);
+        } else {
+          delete err;
+        }
+        break;
+
+      default:
+        err = stream_storage.get_stream(response->stream, request);
+        if (!err) {
+          request->result = response;
+          request->notify(context->loop);
+        } else {
+          if (error_callback) {
+            error_callback(this, err);
+          }
+        }
+        break;
+    }
   }
 
   void
@@ -420,7 +479,6 @@ struct ClientConnection {
               __FILE__,
               __LINE__));
     }
-
     delete response;
   }
 
@@ -498,7 +556,7 @@ struct ClientConnection {
         = reinterpret_cast<WriteRequestData*>(req->data);
 
     ClientConnection* connection = data->connection;
-    ClientContext*          context    = connection->context;
+    ClientContext*    context    = connection->context;
 
     context->log(CQL_LOG_DEBUG, "on_write");
     if (status == -1) {
@@ -513,8 +571,29 @@ struct ClientConnection {
   }
 
   CallerRequest*
+  prepare(
+      const char*             statement,
+      size_t                  size,
+      CallerRequest::Callback callback = NULL) {
+    CallerRequest* request = new CallerRequest();
+    Message*       message = new Message(CQL_OPCODE_PREPARE);
+    BodyPrepare*   prepare = static_cast<BodyPrepare*>(message->body.get());
+    prepare->prepare_string(statement, size);
+
+    request->callback = callback;
+    request->data.assign(statement, size);
+
+    Error* err = send_message(message, request);
+    if (err) {
+      request->error = err;
+      request->notify(context->loop);
+    }
+    return request;
+  }
+
+  CallerRequest*
   exec(
-      Message* message,
+      Message*                message,
       CallerRequest::Callback callback = NULL) {
     CallerRequest* request = new CallerRequest();
     request->callback = callback;
@@ -601,14 +680,17 @@ struct ClientConnection {
 
   void
   init(
-      ConnectionCallback connect  = NULL,
-      KeyspaceCallback   keyspace = NULL
+      ConnectionCallback connect     = NULL,
+      ErrorCallback      error       = NULL,
+      KeyspaceCallback   keyspace    = NULL
       // SchemaCallback     schema   = NULL,
       // TopologyCallback   topology = NULL,
       // StatusCallback     status   = NULL
        ) {
-    connect_callback  = connect;
-    keyspace_callback = keyspace;
+    connect_callback     = connect;
+    keyspace_callback    = keyspace;
+    error_callback       = error;
+
     // schema_callback   = schema;
     // topology_callback = topology;
     // status_callback   = status;

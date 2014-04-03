@@ -22,16 +22,18 @@
 
 namespace cql {
 
-template<typename Error,
+template<typename Data,
+         typename Error,
          typename Result>
 struct Request {
-  typedef std::function<void(Request<Error, Result>*)> Callback;
+  typedef std::function<void(Request<Data, Error, Result>*)> Callback;
 
   std::atomic<bool>       flag;
   std::mutex              mutex;
   std::condition_variable condition;
-  Result                  result;
   Error                   error;
+  Data                    data;
+  Result                  result;
   Callback                callback;
   bool                    use_local_loop;
   uv_work_t               uv_work_req;
@@ -39,6 +41,8 @@ struct Request {
   Request() :
       flag(false),
       error(CQL_ERROR_NO_ERROR),
+      data(NULL),
+      result(NULL),
       callback(NULL),
       use_local_loop(false)
   {}
@@ -76,7 +80,7 @@ struct Request {
         uv_queue_work(
             loop,
             &uv_work_req,
-            &Request<Error, Result>::callback_executor,
+            &Request<Data, Error, Result>::callback_executor,
             NULL);
       }
     }
@@ -89,7 +93,9 @@ struct Request {
   wait() {
     if (!flag.load(std::memory_order_consume)) {
       std::unique_lock<std::mutex> lock(mutex);
-      condition.wait(lock, std::bind(&Request<Error, Result>::ready, this));
+      condition.wait(
+          lock,
+          std::bind(&Request<Data, Error, Result>::ready, this));
     }
   }
 
@@ -110,7 +116,7 @@ struct Request {
       return condition.wait_for(
           lock,
           time,
-          std::bind(&Request<Error, Result>::ready, this));
+          std::bind(&Request<Data, Error, Result>::ready, this));
     }
   }
 
@@ -126,8 +132,8 @@ struct Request {
       uv_work_t* work) {
     (void) work;
     if (work && work->data) {
-      Request<Error, Result>* request
-          = reinterpret_cast<Request<Error, Result>*>(work->data);
+      Request<Data, Error, Result>* request
+          = reinterpret_cast<Request<Data, Error, Result>*>(work->data);
 
       if (request->callback) {
         request->callback(request);
@@ -136,7 +142,7 @@ struct Request {
   }
 
   // don't allow copy
-  Request(Request&) {}
+  Request(Request<Data, Error, Result>&) {}
   void operator=(const Request&) {}
 };
 }

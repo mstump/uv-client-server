@@ -62,6 +62,12 @@ class BodyQuery
 
   void
   query_string(
+      char*  input) {
+    _query.assign(input);
+  }
+
+  void
+  query_string(
       char*  input,
       size_t size) {
     _query.assign(input, size);

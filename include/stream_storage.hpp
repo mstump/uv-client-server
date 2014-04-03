@@ -57,9 +57,9 @@ class StreamStorage {
       const IdType& input,
       StorageType&  output,
       bool          releaseStream = true) {
-    output         = storage_[input];
+    output = storage_[static_cast<int>(input)];
     if (releaseStream) {
-      if (allocated_streams_[output]) {
+      if (allocated_streams_[input]) {
         available_streams_[--available_streams_index_] = input;
         allocated_streams_[input] = false;
       } else {

@@ -108,7 +108,24 @@ struct BodyResult
   int32_t            row_count;
   char*              rows;
 
-  BodyResult()
+  BodyResult() :
+      kind(0),
+      more_pages(false),
+      no_metadata(false),
+      global_table_spec(true),
+      column_count(0),
+      page_state(NULL),
+      page_state_size(0),
+      prepared(NULL),
+      prepared_size(0),
+      change(NULL),
+      change_size(0),
+      keyspace(NULL),
+      keyspace_size(0),
+      table(NULL),
+      table_size(0),
+      row_count(0),
+      rows(NULL)
   {}
 
   uint8_t
