@@ -26,11 +26,11 @@
 #include <stdio.h>
 #include <iostream>
 
-#include "common.hpp"
-#include "message.hpp"
-#include "ssl_context.hpp"
-#include "ssl_session.hpp"
-#include "stream_storage.hpp"
+#include "cql_common.hpp"
+#include "cql_message.hpp"
+#include "cql_ssl_context.hpp"
+#include "cql_ssl_session.hpp"
+#include "cql_stream_storage.hpp"
 
 char TEST_MESSAGE_ERROR[] = {
   0x81, 0x01, 0x7F, 0x00, 0x00, 0x00, 0x00, 0x0C,  // header
@@ -500,14 +500,14 @@ test_ssl() {
 
 int
 main() {
-  // TEST(test_error_consume());
-  // TEST(test_error_prepare());
-  // TEST(test_options_prepare());
-  // TEST(test_startup_prepare());
-  // TEST(test_query_query());
-  // TEST(test_query_query_paging());
-  // TEST(test_ssl());
-  // TEST(test_stream_storage());
+  TEST(test_error_consume());
+  TEST(test_error_prepare());
+  TEST(test_options_prepare());
+  TEST(test_startup_prepare());
+  TEST(test_query_query());
+  TEST(test_query_query_paging());
+  TEST(test_ssl());
+  TEST(test_stream_storage());
   TEST(test_query_query_value());
   return 0;
 }

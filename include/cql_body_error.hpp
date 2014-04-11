@@ -17,8 +17,8 @@
 #ifndef __BODY_ERROR_HPP_INCLUDED__
 #define __BODY_ERROR_HPP_INCLUDED__
 
-#include "body.hpp"
-#include "serialization.hpp"
+#include "cql_body.hpp"
+#include "cql_serialization.hpp"
 
 namespace cql {
 

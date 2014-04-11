@@ -21,7 +21,7 @@
 #include <string>
 #include <utility>
 #include <vector>
-#include "body.hpp"
+#include "cql_body.hpp"
 
 #define CQL_QUERY_FLAG_VALUES             0x01
 #define CQL_QUERY_FLAG_SKIP_METADATA      0x02
@@ -34,25 +34,25 @@ namespace cql {
 class BodyQuery
     : public cql::Body {
  private:
-  typedef std::pair<const char*, size_t> value_t;
-  typedef std::list<value_t>             value_collection_t;
+  typedef std::pair<const char*, size_t> Value;
+  typedef std::list<Value>               ValueCollection;
 
-  std::string        _query;
-  int16_t            _consistency;
-  size_t             _page_size;
-  bool               _page_size_set;
-  std::vector<char>  _paging_state;
-  bool               _serial_consistent;
-  int16_t            _serial_consistency;
-  value_collection_t _values;
+  std::string       query_;
+  int16_t           consistency_;
+  size_t            page_size_;
+  bool              page_size_set_;
+  std::vector<char> paging_state_;
+  bool              serial_consistent_;
+  int16_t           serial_consistency_;
+  ValueCollection   values_;
 
  public:
   BodyQuery() :
-      _consistency(CQL_CONSISTENCY_ANY),
-      _page_size(0),
-      _page_size_set(false),
-      _serial_consistent(false),
-      _serial_consistency(CQL_CONSISTENCY_SERIAL)
+      consistency_(CQL_CONSISTENCY_ANY),
+      page_size_(0),
+      page_size_set_(false),
+      serial_consistent_(false),
+      serial_consistency_(CQL_CONSISTENCY_SERIAL)
   {}
 
   uint8_t
@@ -62,56 +62,56 @@ class BodyQuery
 
   void
   query_string(
-      char*  input) {
-    _query.assign(input);
+      const char* input) {
+    query_.assign(input);
   }
 
   void
   query_string(
-      char*  input,
-      size_t size) {
-    _query.assign(input, size);
+      const char* input,
+      size_t      size) {
+    query_.assign(input, size);
   }
 
   void
   query_string(
       const std::string& input) {
-    _query = input;
+    query_ = input;
   }
 
   void
   page_size(
       size_t size) {
-    _page_size_set = true;
-    _page_size     = size;
+    page_size_set_ = true;
+    page_size_     = size;
   }
 
   void
   paging_state(
       const char* state,
       size_t      size) {
-    _paging_state.resize(size);
-    _paging_state.assign(state, state + size);
+    paging_state_.resize(size);
+    paging_state_.assign(state, state + size);
   }
 
   void
   add_value(
       const char* value,
       size_t      size) {
-    _values.push_back(std::make_pair(value, size));
+    values_.push_back(std::make_pair(value, size));
   }
 
   void
   consistency(
       int16_t consistency) {
-    _consistency = consistency;
+    consistency_ = consistency;
   }
 
   void
   serial_consistency(
       int16_t consistency) {
-    _serial_consistent = true;
-    _serial_consistency = consistency;
+    serial_consistent_ = true;
+    serial_consistency_ = consistency;
   }
 
   bool
@@ -130,38 +130,38 @@ class BodyQuery
       size_t& size) {
     uint8_t  flags  = 0x00;
     // reserved + the long string
-    size            = reserved + sizeof(int32_t) + _query.size();
+    size            = reserved + sizeof(int32_t) + query_.size();
     // consistency
     size           += sizeof(int16_t);
     // flags
     size           += 1;
 
-    if (_serial_consistent) {
+    if (serial_consistent_) {
       flags |= CQL_QUERY_FLAG_SERIAL_CONSISTENCY;
       size  += sizeof(int16_t);
     }
 
-    if (!_paging_state.empty()) {
+    if (!paging_state_.empty()) {
       flags |= CQL_QUERY_FLAG_PAGING_STATE;
-      size += (sizeof(int16_t) + _paging_state.size());
+      size += (sizeof(int16_t) + paging_state_.size());
     }
 
-    if (!_values.empty()) {
+    if (!values_.empty()) {
       size += sizeof(int16_t);
-      for (value_collection_t::const_iterator it = _values.begin();
-           it != _values.end();
+      for (ValueCollection::const_iterator it = values_.begin();
+           it != values_.end();
            ++it) {
         size += (sizeof(int32_t) + it->second);
       }
       flags |= CQL_QUERY_FLAG_VALUES;
     }
 
-    if (_page_size_set) {
+    if (page_size_set_) {
       size += sizeof(int32_t);
       flags |= CQL_QUERY_FLAG_PAGE_SIZE;
     }
 
-    if (_serial_consistent) {
+    if (serial_consistent_) {
       size += sizeof(int16_t);
       flags |= CQL_QUERY_FLAG_SERIAL_CONSISTENCY;
     }
@@ -170,31 +170,31 @@ class BodyQuery
 
     char* buffer = encode_long_string(
         *output + reserved,
-        _query.c_str(),
-        _query.size());
+        query_.c_str(),
+        query_.size());
 
-    buffer = encode_short(buffer, _consistency);
+    buffer = encode_short(buffer, consistency_);
     buffer = encode_byte(buffer, flags);
 
-    if (!_values.empty()) {
-      buffer = encode_short(buffer, _values.size());
-      for (value_collection_t::const_iterator it = _values.begin();
-           it != _values.end();
+    if (!values_.empty()) {
+      buffer = encode_short(buffer, values_.size());
+      for (ValueCollection::const_iterator it = values_.begin();
+           it != values_.end();
            ++it) {
         buffer = encode_long_string(buffer, it->first, it->second);
       }
     }
 
-    if (_page_size_set) {
-      buffer = encode_int(buffer, _page_size);
+    if (page_size_set_) {
+      buffer = encode_int(buffer, page_size_);
     }
 
-    if (!_paging_state.empty()) {
-      buffer = encode_string(buffer, &_paging_state[0], _paging_state.size());
+    if (!paging_state_.empty()) {
+      buffer = encode_string(buffer, &paging_state_[0], paging_state_.size());
     }
 
-    if (_serial_consistent) {
-      buffer = encode_short(buffer, _serial_consistency);
+    if (serial_consistent_) {
+      buffer = encode_short(buffer, serial_consistency_);
     }
 
     return true;

@@ -39,7 +39,7 @@ class StreamStorage {
     if (available_streams_index_ >= Max) {
       return new Error(
           CQL_ERROR_SOURCE_LIBRARY,
-          CQL_ERROR_NO_STREAMS,
+          CQL_ERROR_LIB_NO_STREAMS,
           "no available streams",
           __FILE__,
           __LINE__);
@@ -65,13 +65,18 @@ class StreamStorage {
       } else {
         return new Error(
             CQL_ERROR_SOURCE_LIBRARY,
-            CQL_ERROR_NO_STREAMS,
+            CQL_ERROR_LIB_NO_STREAMS,
             "this stream has already been released",
             __FILE__,
             __LINE__);
       }
     }
     return CQL_ERROR_NO_ERROR;
+  }
+
+  inline size_t
+  available_streams() {
+    return Max - available_streams_index_;
   }
 
  private:

@@ -14,46 +14,30 @@
   limitations under the License.
 */
 
-#ifndef __BODY_SUPPORTED_HPP_INCLUDED__
-#define __BODY_SUPPORTED_HPP_INCLUDED__
+#ifndef __OPTIONS_HPP_INCLUDED__
+#define __OPTIONS_HPP_INCLUDED__
 
-#include <list>
-#include <string>
-
-#include "body.hpp"
+#include "cql_body.hpp"
 
 namespace cql {
 
-struct BodySupported
+struct BodyOptions
     : public Body {
-  std::list<std::string> compression;
-  std::list<std::string> cql_versions;
 
-  BodySupported()
+  BodyOptions()
   {}
 
   uint8_t
   opcode() {
-    return CQL_OPCODE_SUPPORTED;
+    return CQL_OPCODE_OPTIONS;
   }
 
   bool
   consume(
       char*  buffer,
       size_t size) {
+    (void) buffer;
     (void) size;
-    string_multimap_t supported;
-
-    decode_string_multimap(buffer, supported);
-    string_multimap_t::const_iterator it = supported.find("COMPRESSION");
-    if (it != supported.end()) {
-      compression = it->second;
-    }
-
-    it = supported.find("CQL_VERSION");
-    if (it != supported.end()) {
-      cql_versions = it->second;
-    }
     return true;
   }
 
@@ -62,15 +46,14 @@ struct BodySupported
       size_t  reserved,
       char**  output,
       size_t& size) {
-    (void) reserved;
-    (void) output;
-    (void) size;
-    return false;
+    *output = new char[size];
+    size = reserved;
+    return true;
   }
 
  private:
-  BodySupported(const BodySupported&) {}
-  void operator=(const BodySupported&) {}
+  BodyOptions(const BodyOptions&) {}
+  void operator=(const BodyOptions&) {}
 };
 }
 #endif

@@ -23,8 +23,8 @@
 #include <utility>
 #include <vector>
 
-#include "body.hpp"
-#include "iterable.hpp"
+#include "cql_body.hpp"
+#include "cql_iterable.hpp"
 
 #define CQL_RESULT_KIND_VOID          1
 #define CQL_RESULT_KIND_ROWS          2

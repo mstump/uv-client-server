@@ -14,22 +14,22 @@
   limitations under the License.
 */
 
-#ifndef __OPTIONS_HPP_INCLUDED__
-#define __OPTIONS_HPP_INCLUDED__
+#ifndef __BODY_READY_HPP_INCLUDED__
+#define __BODY_READY_HPP_INCLUDED__
 
-#include "body.hpp"
+#include "cql_body.hpp"
 
 namespace cql {
 
-struct BodyOptions
+struct BodyReady
     : public Body {
 
-  BodyOptions()
+  BodyReady()
   {}
 
   uint8_t
   opcode() {
-    return CQL_OPCODE_OPTIONS;
+    return CQL_OPCODE_READY;
   }
 
   bool
@@ -52,8 +52,8 @@ struct BodyOptions
   }
 
  private:
-  BodyOptions(const BodyOptions&) {}
-  void operator=(const BodyOptions&) {}
+  BodyReady(const BodyReady&) {}
+  void operator=(const BodyReady&) {}
 };
 }
 #endif

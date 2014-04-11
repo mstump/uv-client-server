@@ -28,7 +28,7 @@
 #include <openssl/x509.h>
 #include <openssl/x509v3.h>
 
-#include "ssl_session.hpp"
+#include "cql_ssl_session.hpp"
 
 namespace cql {
 
@@ -70,9 +70,9 @@ class SSLContext {
     return CQL_ERROR_NO_ERROR;
   }
 
-  SSLSession*
+  cql::SSLSession*
   session_new() {
-    return new SSLSession(_ssl_ctx);
+    return new cql::SSLSession(_ssl_ctx);
   }
 
   int

@@ -17,14 +17,14 @@
 #ifndef __MESSAGE_HPP_INCLUDED__
 #define __MESSAGE_HPP_INCLUDED__
 
-#include "body_error.hpp"
-#include "body_options.hpp"
-#include "body_prepare.hpp"
-#include "body_query.hpp"
-#include "body_ready.hpp"
-#include "body_result.hpp"
-#include "body_startup.hpp"
-#include "body_supported.hpp"
+#include "cql_body_error.hpp"
+#include "cql_body_options.hpp"
+#include "cql_body_prepare.hpp"
+#include "cql_body_query.hpp"
+#include "cql_body_ready.hpp"
+#include "cql_body_result.hpp"
+#include "cql_body_startup.hpp"
+#include "cql_body_supported.hpp"
 
 #define CQL_HEADER_SIZE 8
 

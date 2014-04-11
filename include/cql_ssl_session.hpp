@@ -31,8 +31,8 @@
 #include <deque>
 #include <string>
 
-#include "common.hpp"
-#include "error.hpp"
+#include "cql_common.hpp"
+#include "cql_error.hpp"
 
 #define BUFFER_SIZE 66560
 

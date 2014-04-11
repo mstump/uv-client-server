@@ -31,8 +31,8 @@
 #include <thread>
 #include <iostream>
 
-#include "common.hpp"
-#include "message.hpp"
+#include "cql_common.hpp"
+#include "cql_message.hpp"
 
 struct Context {
   uv_loop_t* loop;
@@ -105,7 +105,7 @@ on_new_connection(
   if (uv_accept(server, reinterpret_cast<uv_stream_t*>(client)) == 0) {
     uv_read_start(
         reinterpret_cast<uv_stream_t*>(client),
-        alloc_buffer,
+        cql::alloc_buffer,
         handle_read);
   } else {
     uv_close(reinterpret_cast<uv_handle_t*>(client), NULL);

@@ -35,43 +35,60 @@
 #include <vector>
 #include <iomanip>
 
-#include "client_connection.hpp"
+//#include "client_connection.hpp"
+#include "cql.h"
+#include "cql_cluster.hpp"
+
+// void
+// ready(
+//     cql::ClientConnection* connection,
+//     cql::Error*            err) {
+
+//   if (err) {
+//     std::cout << err->message << std::endl;
+//   } else {
+//     std::cout << "ready" << std::endl;
+//     connection->set_keyspace("system");
+//   }
+// }
+
+// void
+// keyspace_set(
+//     cql::ClientConnection* connection,
+//     const char*            keyspace,
+//     size_t                 size) {
+//   (void) connection;
+//   (void) size;
+//   std::cout << "keyspace_set: " << keyspace << std::endl;
+// }
+
+// void
+// error(
+//     cql::ClientConnection* connection,
+//     cql::Error*            err) {
+//   (void) connection;
+//   std::cout << "error: " << err->message << std::endl;
+// }
 
 void
-ready(
-    cql::ClientConnection* connection,
-    cql::Error*            err) {
-
-  if (err) {
-    std::cout << err->message << std::endl;
-  } else {
-    std::cout << "ready" << std::endl;
-    connection->set_keyspace("system");
-  }
-}
-
-void
-keyspace_set(
-    cql::ClientConnection* connection,
-    const char*            keyspace,
-    size_t                 size) {
-  (void) connection;
+print_log(
+    int         level,
+    const char* message,
+    size_t      size) {
+  (void) level;
   (void) size;
-  std::cout << "keyspace_set: " << keyspace << std::endl;
-}
-
-void
-error(
-    cql::ClientConnection* connection,
-    cql::Error*            err) {
-  (void) connection;
-  std::cout << "error: " << err->message << std::endl;
+  std::cout << "log: " << message << std::endl;
 }
 
 int
 main() {
-  cql::ClientContext    context(uv_default_loop());
-  cql::ClientConnection connection(&context);
-  connection.init(ready, error, keyspace_set);
-  return uv_run(context.loop, UV_RUN_DEFAULT);
+  // cql::ClientContext    context(uv_default_loop());
+  // cql::ClientConnection connection(&context);
+
+  cql::Cluster cluster;
+  cluster.log_callback(print_log);
+  cql::Session* session = cluster.connect();
+  session->shutdown();
+
+
 }

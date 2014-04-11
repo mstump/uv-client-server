@@ -18,7 +18,7 @@
 #define __PREPARE_HPP_INCLUDED__
 
 #include <string>
-#include "body.hpp"
+#include "cql_body.hpp"
 
 namespace cql {
 

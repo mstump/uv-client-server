@@ -20,7 +20,7 @@
 #include <map>
 #include <string>
 
-#include "body.hpp"
+#include "cql_body.hpp"
 
 namespace cql {
 
